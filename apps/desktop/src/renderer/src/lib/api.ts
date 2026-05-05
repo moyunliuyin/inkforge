@@ -399,6 +399,12 @@ export const worldRelationshipApi = {
   delete: (input: import("@inkforge/shared").WorldRelationshipDeleteInput): Promise<{ id: string }> => api().worldRelationship.delete(input),
 };
 
+export const worldTimelineApi = {
+  list: (input: import("@inkforge/shared").WorldTimelineListInput): Promise<import("@inkforge/shared").WorldTimelineEventRecord[]> => api().worldTimeline.list(input),
+  save: (input: import("@inkforge/shared").WorldTimelineSaveInput): Promise<import("@inkforge/shared").WorldTimelineEventRecord> => api().worldTimeline.save(input),
+  delete: (input: import("@inkforge/shared").WorldTimelineDeleteInput): Promise<{ id: string }> => api().worldTimeline.delete(input),
+};
+
 // ----- Project Export + Chapter Bulk Import (ported from ainovel) -----
 export const projectExportApi = {
   txt: (input: import("@inkforge/shared").ProjectExportInput): Promise<import("@inkforge/shared").ProjectExportResponse> => api().projectExport.txt(input),

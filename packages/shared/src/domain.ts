@@ -194,6 +194,39 @@ export interface WorldRelationshipRecord {
   updatedAt: string;
 }
 
+// ===== World Timeline Events (per-entry state changes mapped to chapters) =====
+export type WorldTimelineAction = "create" | "transfer" | "destroy" | "modify";
+
+export interface WorldTimelineEventRecord {
+  id: string;
+  projectId: string;
+  entryKind: WorldGraphEndpointKind;
+  entryId: string;
+  chapterId: string | null;
+  chapterOrder: number;
+  innerOrder: number;
+  action: WorldTimelineAction;
+  ownerKind: WorldGraphEndpointKind | null;
+  ownerId: string | null;
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorldTimelineSaveInput {
+  id?: string;
+  projectId: string;
+  entryKind: WorldGraphEndpointKind;
+  entryId: string;
+  chapterId: string | null;
+  chapterOrder: number;
+  innerOrder: number;
+  action: WorldTimelineAction;
+  ownerKind: WorldGraphEndpointKind | null;
+  ownerId: string | null;
+  note: string;
+}
+
 export type SkillScope = "global" | "project" | "community";
 
 export type SkillTriggerType =

@@ -38,3 +38,4 @@ export * from "./repositories/sample-lib-repo";
 export * from "./repositories/rag-repo";
 // ----- World Relationships (graph, ported from ainovel) -----
 export * from "./repositories/world-relationship-repo";
+export * from "./repositories/world-timeline-repo";

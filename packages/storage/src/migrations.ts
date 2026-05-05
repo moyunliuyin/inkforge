@@ -799,6 +799,44 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    // ===================================================================
+    // v20 · World timeline events
+    //
+    // Per-entry timeline of state changes mapped to chapter ordinals.
+    // Used by nebula graph dual-axis slider to scrub through ownership
+    // and by chapter generation prompt to inject "as of chapter N, item X
+    // is held by character Y" context.
+    // ===================================================================
+    version: 20,
+    name: "world_timeline_events",
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS world_timeline_events (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          entry_kind TEXT NOT NULL CHECK(entry_kind IN ('character', 'world_entry')),
+          entry_id TEXT NOT NULL,
+          chapter_id TEXT,
+          chapter_order INTEGER NOT NULL DEFAULT 0,
+          inner_order INTEGER NOT NULL DEFAULT 0
+            CHECK(inner_order BETWEEN 0 AND 100),
+          action TEXT NOT NULL CHECK(action IN ('create','transfer','destroy','modify')),
+          owner_kind TEXT CHECK(owner_kind IS NULL OR owner_kind IN ('character','world_entry')),
+          owner_id TEXT,
+          note TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+          FOREIGN KEY(chapter_id) REFERENCES chapters(id) ON DELETE SET NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_wte_project_order
+          ON world_timeline_events(project_id, chapter_order, inner_order);
+        CREATE INDEX IF NOT EXISTS idx_wte_entry
+          ON world_timeline_events(project_id, entry_kind, entry_id);
+      `);
+    },
+  },
 ];
 
 export function runMigrations(db: DB): number {

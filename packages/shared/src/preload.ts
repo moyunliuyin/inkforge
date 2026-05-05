@@ -573,6 +573,26 @@ export interface InkforgeApi {
 }
 
 // =====================================================================
+// World Timeline Events (per-entry state changes) · interface declaration merging
+// =====================================================================
+import type {
+  WorldTimelineDeleteInput,
+  WorldTimelineListInput,
+} from "./ipc";
+import type {
+  WorldTimelineEventRecord,
+  WorldTimelineSaveInput,
+} from "./domain";
+
+export interface InkforgeApi {
+  worldTimeline: {
+    list(input: WorldTimelineListInput): Promise<WorldTimelineEventRecord[]>;
+    save(input: WorldTimelineSaveInput): Promise<WorldTimelineEventRecord>;
+    delete(input: WorldTimelineDeleteInput): Promise<{ id: string }>;
+  };
+}
+
+// =====================================================================
 // Project Export + Chapter Bulk Import (ported from ainovel) · merging
 // =====================================================================
 import type {

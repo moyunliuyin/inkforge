@@ -62,6 +62,8 @@ import type {
   // ----- World Relationships -----
   WorldRelationshipRecord,
   WorldGraphEndpointKind,
+  WorldTimelineEventRecord,
+  WorldTimelineSaveInput,
 } from "./domain";
 
 export const ipcChannels = {
@@ -237,6 +239,9 @@ export const ipcChannels = {
   worldRelationshipList: "world-relationship:list",
   worldRelationshipSave: "world-relationship:save",
   worldRelationshipDelete: "world-relationship:delete",
+  worldTimelineList: "world-timeline:list",
+  worldTimelineSave: "world-timeline:save",
+  worldTimelineDelete: "world-timeline:delete",
   // ----- Project Export + Chapter Bulk Import (ported from ainovel) -----
   projectExportTxt: "project:export-txt",
   projectExportMd: "project:export-md",
@@ -2155,6 +2160,17 @@ export interface WorldRelationshipDeleteInput {
   id: string;
 }
 
+export interface WorldTimelineListInput {
+  projectId: string;
+  entryKind?: WorldGraphEndpointKind;
+  entryId?: string;
+  upToChapterOrder?: number;
+}
+
+export interface WorldTimelineDeleteInput {
+  id: string;
+}
+
 export interface IpcRequestMap {
   [ipcChannels.worldRelationshipList]: {
     req: WorldRelationshipListInput;
@@ -2166,6 +2182,18 @@ export interface IpcRequestMap {
   };
   [ipcChannels.worldRelationshipDelete]: {
     req: WorldRelationshipDeleteInput;
+    res: { id: string };
+  };
+  [ipcChannels.worldTimelineList]: {
+    req: WorldTimelineListInput;
+    res: WorldTimelineEventRecord[];
+  };
+  [ipcChannels.worldTimelineSave]: {
+    req: WorldTimelineSaveInput;
+    res: WorldTimelineEventRecord;
+  };
+  [ipcChannels.worldTimelineDelete]: {
+    req: WorldTimelineDeleteInput;
     res: { id: string };
   };
 }

@@ -299,6 +299,11 @@ const api: InkforgeApi = {
     save: (input) => ipcRenderer.invoke(ipcChannels.worldRelationshipSave, input),
     delete: (input) => ipcRenderer.invoke(ipcChannels.worldRelationshipDelete, input),
   },
+  worldTimeline: {
+    list: (input) => ipcRenderer.invoke(ipcChannels.worldTimelineList, input),
+    save: (input) => ipcRenderer.invoke(ipcChannels.worldTimelineSave, input),
+    delete: (input) => ipcRenderer.invoke(ipcChannels.worldTimelineDelete, input),
+  },
   // ----- Project Export + Chapter Bulk Import (ported from ainovel) -----
   projectExport: {
     txt: (input) => ipcRenderer.invoke(ipcChannels.projectExportTxt, input),
