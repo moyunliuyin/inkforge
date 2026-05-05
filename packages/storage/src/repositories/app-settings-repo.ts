@@ -11,6 +11,14 @@ const DEFAULTS: AppSettings = {
   devModeEnabled: false,
   onboardingCompleted: false,
   sceneRoutingMode: "basic",
+  editorFontSize: 14,
+  editorFontFamily: "",
+  companionEnabled: true,
+  autoSaveInterval: 60,
+  autoOpenLastProject: true,
+  dataDir: null,
+  autoBackup: false,
+  defaultDailyGoal: 1000,
 };
 
 type SettingRow = { key: string; value: string };
@@ -18,21 +26,38 @@ type SettingRow = { key: string; value: string };
 function parseValue(key: keyof AppSettings, raw: string): AppSettings[keyof AppSettings] {
   switch (key) {
     case "theme":
-      return raw === "light" ? "light" : "dark";
+      if (raw === "light") return "light";
+      if (raw === "system") return "system";
+      return "dark";
     case "activeProviderId":
+    case "dataDir":
       return raw ? raw : null;
     case "analysisEnabled":
     case "devModeEnabled":
     case "onboardingCompleted":
+    case "companionEnabled":
+    case "autoOpenLastProject":
+    case "autoBackup":
       return raw === "true";
-    case "analysisThreshold": {
+    case "analysisThreshold":
+    case "autoSaveInterval":
+    case "defaultDailyGoal": {
+      if (!/^-?\d+$/.test(raw)) return DEFAULTS[key];
       const parsed = Number.parseInt(raw, 10);
-      return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULTS.analysisThreshold;
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULTS[key];
+    }
+    case "editorFontSize": {
+      if (!/^-?\d+$/.test(raw)) return DEFAULTS.editorFontSize;
+      const parsed = Number.parseInt(raw, 10);
+      if (!Number.isFinite(parsed)) return DEFAULTS.editorFontSize;
+      return Math.max(8, Math.min(72, parsed));
     }
     case "uiLanguage":
       return coerceLang(raw, DEFAULTS.uiLanguage);
     case "sceneRoutingMode":
       return raw === "advanced" ? "advanced" : ("basic" as SceneRoutingMode);
+    case "editorFontFamily":
+      return raw;
     default:
       return raw as AppSettings[keyof AppSettings];
   }

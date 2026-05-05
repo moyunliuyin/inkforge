@@ -21,6 +21,7 @@ import { ReminderToast } from "./components/log";
 import { TitleBar } from "./components/titlebar";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { CrashRecoveryBanner } from "./components/CrashRecoveryBanner";
+import { SettingsDrawer } from "./components/settings";
 
 export function App(): JSX.Element {
   const setSettings = useAppStore((s) => s.setSettings);
@@ -40,10 +41,31 @@ export function App(): JSX.Element {
   }, [settingsQuery.data, setSettings]);
 
   useEffect(() => {
-    const theme = settings.theme === "light" ? "theme-light" : "theme-dark";
-    document.documentElement.classList.remove("theme-light", "theme-dark");
-    document.documentElement.classList.add(theme);
+    const root = document.documentElement;
+    const apply = (mode: "dark" | "light") => {
+      root.classList.remove("theme-light", "theme-dark");
+      root.classList.add(mode === "light" ? "theme-light" : "theme-dark");
+    };
+    if (settings.theme === "system") {
+      const mq = window.matchMedia("(prefers-color-scheme: light)");
+      apply(mq.matches ? "light" : "dark");
+      const onChange = (e: MediaQueryListEvent) => apply(e.matches ? "light" : "dark");
+      mq.addEventListener("change", onChange);
+      return () => mq.removeEventListener("change", onChange);
+    }
+    apply(settings.theme);
+    return undefined;
   }, [settings.theme]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const safeSize = Math.max(8, Math.min(72, settings.editorFontSize || 14));
+    root.style.setProperty("--editor-font-size", `${safeSize}px`);
+    root.style.setProperty(
+      "--editor-font-family",
+      settings.editorFontFamily || "inherit",
+    );
+  }, [settings.editorFontSize, settings.editorFontFamily]);
 
   const providersQuery = useQuery({
     queryKey: ["providers"],
@@ -68,7 +90,8 @@ export function App(): JSX.Element {
     }
   }, [providersQuery.data, projectsQuery.data, settings.onboardingCompleted]);
 
-  const loading =    !settingsLoaded ||
+  const loading =
+    !settingsLoaded ||
     providersQuery.isLoading ||
     projectsQuery.isLoading ||
     settingsQuery.isLoading;
@@ -93,6 +116,7 @@ export function App(): JSX.Element {
             <OnboardingPage onFinish={() => setOnboarded(true)} />
           </div>
         </div>
+        <SettingsDrawer />
       </ErrorBoundary>
     );
   }
@@ -124,7 +148,8 @@ export function App(): JSX.Element {
             </ErrorBoundary>
           </div>
         </div>
-        <CompanionMount projectId={currentProjectId ?? null} />
+        {settings.companionEnabled && <CompanionMount projectId={currentProjectId ?? null} />}
+        <SettingsDrawer />
       </div>
     </ErrorBoundary>
   );

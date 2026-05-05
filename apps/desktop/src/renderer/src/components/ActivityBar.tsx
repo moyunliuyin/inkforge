@@ -25,6 +25,7 @@ const ITEMS: NavItem[] = [
 export function ActivityBar(): JSX.Element {
   const mainView = useAppStore((s) => s.mainView);
   const setMainView = useAppStore((s) => s.setMainView);
+  const openSettings = useAppStore((s) => s.openSettings);
 
   return (
     <nav className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-ink-700 bg-ink-900/90 py-2">
@@ -49,6 +50,17 @@ export function ActivityBar(): JSX.Element {
           </button>
         );
       })}
+
+      <button
+        className="group relative mt-auto flex h-10 w-10 items-center justify-center rounded-md text-lg text-ink-300 transition-colors hover:bg-ink-700/60 hover:text-ink-100"
+        onClick={() => openSettings(true)}
+        title="设置"
+      >
+        <span aria-hidden>⚙</span>
+        <span className="pointer-events-none absolute left-12 z-20 whitespace-nowrap rounded-md border border-ink-600 bg-ink-800 px-2 py-1 text-xs text-ink-100 opacity-0 shadow transition-opacity group-hover:opacity-100">
+          设置
+        </span>
+      </button>
     </nav>
   );
 }

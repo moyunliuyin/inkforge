@@ -12,7 +12,6 @@ import { TerminalPanel } from "../components/TerminalPanel";
 import { StatusBar } from "../components/StatusBar";
 import { ProviderSwitcher } from "../components/ProviderSwitcher";
 import { ProviderSettingsPanel } from "../components/ProviderSettingsPanel";
-import { SettingsDialog } from "../components/SettingsDialog";
 import { ExportDialog } from "../components/ExportDialog";
 
 export function WorkspacePage(): JSX.Element {
@@ -292,7 +291,6 @@ export function WorkspacePage(): JSX.Element {
 
       <StatusBar />
       <ProviderSettingsPanel />
-      <SettingsDialog />
       {currentProjectId ? (
         <ExportDialog
           projectId={currentProjectId}

@@ -121,6 +121,14 @@ const DEFAULT_SETTINGS: AppSettings = {
   devModeEnabled: false,
   onboardingCompleted: false,
   sceneRoutingMode: "basic",
+  editorFontSize: 14,
+  editorFontFamily: "",
+  companionEnabled: true,
+  autoSaveInterval: 60,
+  autoOpenLastProject: true,
+  dataDir: null,
+  autoBackup: false,
+  defaultDailyGoal: 1000,
 };
 
 export const useAppStore = create<AppState>((set) => ({

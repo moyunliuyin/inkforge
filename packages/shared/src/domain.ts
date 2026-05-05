@@ -77,10 +77,18 @@ export type AppSettingKey =
   | "uiLanguage"
   | "devModeEnabled"
   | "onboardingCompleted"
-  | "sceneRoutingMode";
+  | "sceneRoutingMode"
+  | "editorFontSize"
+  | "editorFontFamily"
+  | "companionEnabled"
+  | "autoSaveInterval"
+  | "autoOpenLastProject"
+  | "dataDir"
+  | "autoBackup"
+  | "defaultDailyGoal";
 
 export interface AppSettings {
-  theme: "dark" | "light";
+  theme: "dark" | "light" | "system";
   activeProviderId: string | null;
   analysisEnabled: boolean;
   analysisThreshold: number;
@@ -88,6 +96,14 @@ export interface AppSettings {
   devModeEnabled: boolean;
   onboardingCompleted: boolean;
   sceneRoutingMode: SceneRoutingMode;
+  editorFontSize: number;
+  editorFontFamily: string;
+  companionEnabled: boolean;
+  autoSaveInterval: number;
+  autoOpenLastProject: boolean;
+  dataDir: string | null;
+  autoBackup: boolean;
+  defaultDailyGoal: number;
 }
 
 // ===== Scene Bindings (ported from ainovel) =====
