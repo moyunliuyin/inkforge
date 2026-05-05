@@ -193,11 +193,10 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
     return () => ro.disconnect();
   }, []);
 
-  const graphData = useMemo(() => {
+  const baseGraphData = useMemo(() => {
     const characters = charactersQuery.data ?? [];
     const worldEntries = worldsQuery.data ?? [];
     const relationships = relationshipsQuery.data ?? [];
-    const timelineEvents = timelineQuery.data ?? [];
 
     const nodes: NebulaNode[] = [
       ...characters.map((c: NovelCharacterRecord) => ({
@@ -225,6 +224,12 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
       weight: r.weight,
     }));
 
+    return { nodes, links };
+  }, [charactersQuery.data, worldsQuery.data, relationshipsQuery.data]);
+
+  const graphData = useMemo(() => {
+    const timelineEvents = timelineQuery.data ?? [];
+    const nodes = baseGraphData.nodes;
     // Compute ownership at current scrubber position; add ephemeral edges
     const events = [...timelineEvents]
       .filter(
@@ -245,34 +250,28 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
         owner.set(k, { kind: e.ownerKind, id: e.ownerId });
       else owner.set(k, null);
     }
-    let synthetic = 0;
+    const synthetic: NebulaLink[] = [];
+    let i = 0;
     for (const [entryNodeId, ow] of owner) {
       if (!ow) continue;
       const ownerNodeId = makeNodeId(ow.kind, ow.id);
-      const exists = links.some(
+      const exists = baseGraphData.links.some(
         (l) =>
           (typeof l.source === "string" ? l.source : l.source.id) === ownerNodeId &&
           (typeof l.target === "string" ? l.target : l.target.id) === entryNodeId,
       );
       if (exists) continue;
-      links.push({
+      synthetic.push({
         source: ownerNodeId,
         target: entryNodeId,
-        relId: `__synthetic_${synthetic++}`,
+        relId: `__synthetic_${i++}`,
         label: "持有",
         weight: 6,
       });
     }
-
-    return { nodes, links };
-  }, [
-    charactersQuery.data,
-    worldsQuery.data,
-    relationshipsQuery.data,
-    timelineQuery.data,
-    chapterIdx,
-    innerIdx,
-  ]);
+    // Reuse base nodes ref (preserve node identity for force-graph)
+    return { nodes, links: [...baseGraphData.links, ...synthetic] };
+  }, [baseGraphData, timelineQuery.data, chapterIdx, innerIdx]);
 
   const handleNodeClick = useCallback(
     (node: NebulaNode) => {
@@ -302,6 +301,7 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
   );
 
   const handleLinkClick = useCallback((link: NebulaLink) => {
+    if (link.relId.startsWith("__synthetic_")) return;
     setSelectedEdge(link);
     setEditLabel(link.label ?? "");
     setEditWeight(link.weight);
