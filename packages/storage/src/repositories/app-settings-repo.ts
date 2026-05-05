@@ -19,6 +19,7 @@ const DEFAULTS: AppSettings = {
   dataDir: null,
   autoBackup: false,
   defaultDailyGoal: 1000,
+  pageProjectSwitcher: false,
 };
 
 type SettingRow = { key: string; value: string };
@@ -38,6 +39,7 @@ function parseValue(key: keyof AppSettings, raw: string): AppSettings[keyof AppS
     case "companionEnabled":
     case "autoOpenLastProject":
     case "autoBackup":
+    case "pageProjectSwitcher":
       return raw === "true";
     case "analysisThreshold":
     case "autoSaveInterval":

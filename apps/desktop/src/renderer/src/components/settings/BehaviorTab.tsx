@@ -32,6 +32,13 @@ export function BehaviorTab(): JSX.Element {
       />
 
       <Toggle
+        checked={settings.pageProjectSwitcher}
+        onChange={(v) => mut.mutate({ pageProjectSwitcher: v })}
+        title="页面内显示项目切换器"
+        hint="开启后写作 / 大纲 / 世界观页顶部额外显示项目切换器（标题栏始终保留）"
+      />
+
+      <Toggle
         checked={settings.devModeEnabled}
         onChange={(v) => mut.mutate({ devModeEnabled: v })}
         title="开发者模式"

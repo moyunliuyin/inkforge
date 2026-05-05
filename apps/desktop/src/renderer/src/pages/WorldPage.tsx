@@ -6,6 +6,7 @@ import { WorldCategorySidebar } from "../components/world/WorldCategorySidebar";
 import { WorldEntryList } from "../components/world/WorldEntryList";
 import { WorldEntryDetail } from "../components/world/WorldEntryDetail";
 import { WorldGraph } from "../components/world/WorldGraph";
+import { ProjectSwitcher } from "../components/ProjectSwitcher";
 
 const DRAFT_ID = "__draft__";
 type WorldTab = "entries" | "graph";
@@ -19,6 +20,7 @@ export function WorldPage(): JSX.Element {
   const searchQuery = useAppStore((s) => s.worldSearchQuery);
   const setSearchQuery = useAppStore((s) => s.setWorldSearchQuery);
   const [tab, setTab] = useState<WorldTab>("entries");
+  const pageProjectSwitcher = useAppStore((s) => s.settings.pageProjectSwitcher);
 
   const allEntriesQuery = useQuery({
     queryKey: ["world-entries", currentProjectId],
@@ -90,6 +92,11 @@ export function WorldPage(): JSX.Element {
         >
           关系图
         </button>
+        {pageProjectSwitcher && (
+          <div className="ml-auto">
+            <ProjectSwitcher variant="inline" />
+          </div>
+        )}
       </div>
       {tab === "entries" ? (
         <div className="flex flex-1 overflow-hidden">

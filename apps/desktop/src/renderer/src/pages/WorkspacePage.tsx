@@ -24,6 +24,7 @@ export function WorkspacePage(): JSX.Element {
   const finishAnalysis = useAppStore((s) => s.finishAnalysis);
   const openSettings = useAppStore((s) => s.openSettings);
   const openProviderPanel = useAppStore((s) => s.openProviderPanel);
+  const pageProjectSwitcher = useAppStore((s) => s.settings.pageProjectSwitcher);
   const rightPanel = useAppStore((s) => s.rightPanel);
   const setRightPanel = useAppStore((s) => s.setRightPanel);
   const terminalOpen = useAppStore((s) => s.terminalOpen);
@@ -186,17 +187,19 @@ export function WorkspacePage(): JSX.Element {
       <header className="flex items-center justify-between border-b border-ink-700 bg-ink-800/70 px-4 py-2">
         <div className="flex items-center gap-3">
           <span className="text-amber-300">墨炉</span>
-          <select
-            className="max-w-xs rounded-md border border-ink-600 bg-ink-800 px-2 py-1 text-sm text-ink-200 focus:border-amber-500 focus:outline-none"
-            value={resolvedProjectId ?? ""}
-            onChange={(e) => switchProject.mutate(e.target.value)}
-          >
-            {(projectsQuery.data ?? []).map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
+          {pageProjectSwitcher && (
+            <select
+              className="max-w-xs rounded-md border border-ink-600 bg-ink-800 px-2 py-1 text-sm text-ink-200 focus:border-amber-500 focus:outline-none"
+              value={resolvedProjectId ?? ""}
+              onChange={(e) => switchProject.mutate(e.target.value)}
+            >
+              {(projectsQuery.data ?? []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
             ))}
-          </select>
+            </select>
+          )}
           {resolvedProject && (
             <span className="text-xs text-ink-400">目标 {resolvedProject.dailyGoal} 字/日</span>
           )}

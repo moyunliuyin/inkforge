@@ -129,6 +129,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   dataDir: null,
   autoBackup: false,
   defaultDailyGoal: 1000,
+  pageProjectSwitcher: false,
 };
 
 export const useAppStore = create<AppState>((set) => ({

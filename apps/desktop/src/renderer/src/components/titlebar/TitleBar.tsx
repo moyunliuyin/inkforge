@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAppStore } from "../../stores/app-store";
+import { ProjectSwitcher } from "../ProjectSwitcher";
 
 /**
  * 自定义无边框 titlebar。
@@ -96,6 +97,8 @@ export function TitleBar(): JSX.Element {
           <span aria-hidden>{viewMeta.icon}</span>
           <span>{viewMeta.label}</span>
         </span>
+        <span className="ml-1 hidden h-3.5 w-px bg-white/10 sm:inline" />
+        <ProjectSwitcher variant="titlebar" />
       </div>
 
       {/* ===== 中：留白拖拽区（保持极简） ===== */}

@@ -85,7 +85,8 @@ export type AppSettingKey =
   | "autoOpenLastProject"
   | "dataDir"
   | "autoBackup"
-  | "defaultDailyGoal";
+  | "defaultDailyGoal"
+  | "pageProjectSwitcher";
 
 export interface AppSettings {
   theme: "dark" | "light" | "system";
@@ -104,6 +105,7 @@ export interface AppSettings {
   dataDir: string | null;
   autoBackup: boolean;
   defaultDailyGoal: number;
+  pageProjectSwitcher: boolean;
 }
 
 // ===== Scene Bindings (ported from ainovel) =====

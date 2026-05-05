@@ -5,13 +5,9 @@ import type {
   OutlineCardRecord,
   ProjectRecord,
 } from "@inkforge/shared";
-import {
-  chapterGenApi,
-  outlineApi,
-  outlineGenApi,
-  projectApi,
-} from "../lib/api";
+import { chapterGenApi, outlineApi, outlineGenApi, projectApi } from "../lib/api";
 import { useAppStore } from "../stores/app-store";
+import { ProjectSwitcher } from "../components/ProjectSwitcher";
 
 interface ProjectMetaDraft {
   synopsis: string;
@@ -22,6 +18,7 @@ interface ProjectMetaDraft {
 
 export function OutlinePage(): JSX.Element {
   const projectId = useAppStore((s) => s.currentProjectId);
+  const pageProjectSwitcher = useAppStore((s) => s.settings.pageProjectSwitcher);
   const queryClient = useQueryClient();
 
   const projectsQuery = useQuery({
@@ -252,6 +249,7 @@ export function OutlinePage(): JSX.Element {
     <div className="flex h-full w-full flex-col bg-ink-900 text-ink-100">
       <header className="flex shrink-0 items-center gap-3 border-b border-ink-700 px-4 py-3">
         <h1 className="text-base font-semibold">📋 {project.name} · 大纲生成</h1>
+        {pageProjectSwitcher && <ProjectSwitcher variant="inline" />}
         <button
           className="ml-auto rounded-md border border-ink-600 px-3 py-1 text-xs hover:bg-ink-700"
           onClick={() => setMetaOpen(true)}
