@@ -33,6 +33,7 @@ import { registerSceneBindingHandlers } from "./scene-binding";
 import { registerSampleLibHandlers } from "./sample-lib";
 import { registerWorldRelationshipHandlers } from "./world-relationship";
 import { registerWorldTimelineHandlers } from "./world-timeline";
+import { registerWorldExtractHandlers } from "./world-extract";
 import { registerProjectExportHandlers } from "./project-export";
 import { registerOutlineGenerationHandlers } from "./outline-generation";
 import { startDailyReminder } from "../services/chapter-log-service";
@@ -78,6 +79,7 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
   // ----- World Relationships (graph, ported from ainovel) -----
   registerWorldRelationshipHandlers();
   registerWorldTimelineHandlers();
+  registerWorldExtractHandlers();
   // ----- Project Export + Chapter Bulk Import (ported from ainovel) -----
   registerProjectExportHandlers(getWindow);
   // ----- Module 6: AI outline + chapter generation (ainovel-style) -----

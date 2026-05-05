@@ -242,6 +242,7 @@ export const ipcChannels = {
   worldTimelineList: "world-timeline:list",
   worldTimelineSave: "world-timeline:save",
   worldTimelineDelete: "world-timeline:delete",
+  worldExtractRun: "world-extract:run",
   // ----- Project Export + Chapter Bulk Import (ported from ainovel) -----
   projectExportTxt: "project:export-txt",
   projectExportMd: "project:export-md",
@@ -2171,6 +2172,22 @@ export interface WorldTimelineDeleteInput {
   id: string;
 }
 
+export interface WorldExtractRunInput {
+  projectId: string;
+}
+
+export interface WorldExtractRunResponse {
+  charactersTotal: number;
+  charactersInserted: number;
+  entriesTotal: number;
+  entriesInserted: number;
+  relationshipsTotal: number;
+  relationshipsInserted: number;
+  bookCharsUsed: number;
+  bookCharsTotal: number;
+  durationMs: number;
+}
+
 export interface IpcRequestMap {
   [ipcChannels.worldRelationshipList]: {
     req: WorldRelationshipListInput;
@@ -2195,6 +2212,10 @@ export interface IpcRequestMap {
   [ipcChannels.worldTimelineDelete]: {
     req: WorldTimelineDeleteInput;
     res: { id: string };
+  };
+  [ipcChannels.worldExtractRun]: {
+    req: WorldExtractRunInput;
+    res: WorldExtractRunResponse;
   };
 }
 

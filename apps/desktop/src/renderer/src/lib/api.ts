@@ -405,6 +405,10 @@ export const worldTimelineApi = {
   delete: (input: import("@inkforge/shared").WorldTimelineDeleteInput): Promise<{ id: string }> => api().worldTimeline.delete(input),
 };
 
+export const worldExtractApi = {
+  run: (input: import("@inkforge/shared").WorldExtractRunInput): Promise<import("@inkforge/shared").WorldExtractRunResponse> => api().worldExtract.run(input),
+};
+
 // ----- Project Export + Chapter Bulk Import (ported from ainovel) -----
 export const projectExportApi = {
   txt: (input: import("@inkforge/shared").ProjectExportInput): Promise<import("@inkforge/shared").ProjectExportResponse> => api().projectExport.txt(input),

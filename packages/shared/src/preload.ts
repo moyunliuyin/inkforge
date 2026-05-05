@@ -593,6 +593,20 @@ export interface InkforgeApi {
 }
 
 // =====================================================================
+// World Extract (LLM book scan) · interface declaration merging
+// =====================================================================
+import type {
+  WorldExtractRunInput,
+  WorldExtractRunResponse,
+} from "./ipc";
+
+export interface InkforgeApi {
+  worldExtract: {
+    run(input: WorldExtractRunInput): Promise<WorldExtractRunResponse>;
+  };
+}
+
+// =====================================================================
 // Project Export + Chapter Bulk Import (ported from ainovel) · merging
 // =====================================================================
 import type {

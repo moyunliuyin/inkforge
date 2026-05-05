@@ -16,6 +16,7 @@ import {
   chapterApi,
   novelCharacterApi,
   worldApi,
+  worldExtractApi,
   worldRelationshipApi,
   worldTimelineApi,
 } from "../../lib/api";
@@ -115,6 +116,47 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ["world-timeline", projectId] }),
   });
+
+  const extractMutation = useMutation({
+    mutationFn: () => worldExtractApi.run({ projectId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["novel-characters", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["world-entries", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["world-relationships", projectId] });
+    },
+  });
+
+  const [extractResult, setExtractResult] = useState<{
+    charactersInserted: number;
+    entriesInserted: number;
+    relationshipsInserted: number;
+    bookCharsUsed: number;
+    bookCharsTotal: number;
+  } | null>(null);
+  const [extractError, setExtractError] = useState<string | null>(null);
+
+  const handleExtract = async () => {
+    if (extractMutation.isPending) return;
+    if (!confirm(
+      "将调用 LLM 扫描全书并抽取人物 / 世界条目 / 关系。\n" +
+        "已存在的（按名字匹配）会跳过，仅新增。\n" +
+        "继续？",
+    )) return;
+    setExtractError(null);
+    setExtractResult(null);
+    try {
+      const r = await extractMutation.mutateAsync();
+      setExtractResult({
+        charactersInserted: r.charactersInserted,
+        entriesInserted: r.entriesInserted,
+        relationshipsInserted: r.relationshipsInserted,
+        bookCharsUsed: r.bookCharsUsed,
+        bookCharsTotal: r.bookCharsTotal,
+      });
+    } catch (e) {
+      setExtractError(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const [pendingSrcId, setPendingSrcId] = useState<string | null>(null);
   const [edgeForm, setEdgeForm] = useState<{
@@ -324,8 +366,9 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
 
   const releasePinned = () => {
     graphData.nodes.forEach((n) => {
-      n.fx = undefined;
-      n.fy = undefined;
+      const node = n as unknown as Record<string, unknown>;
+      delete node.fx;
+      delete node.fy;
     });
     fgRef.current?.d3ReheatSimulation();
   };
@@ -398,6 +441,14 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
 
       <div className="absolute right-3 top-3 flex gap-2">
         <button
+          className="pointer-events-auto rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs text-amber-200 hover:bg-amber-500/20 disabled:opacity-50"
+          onClick={handleExtract}
+          disabled={extractMutation.isPending}
+          title="调用 LLM 扫描全书，抽取人物 / 世界条目 / 关系（仅追加新的）"
+        >
+          {extractMutation.isPending ? "🤖 抽取中…" : "🤖 从全书提取"}
+        </button>
+        <button
           className="pointer-events-auto rounded-md border border-ink-600 bg-ink-800/80 px-3 py-1 text-xs text-ink-200 hover:bg-ink-700"
           onClick={releasePinned}
           title="解除所有节点固定位置"
@@ -405,6 +456,37 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
           🌀 重新发散
         </button>
       </div>
+
+      {(extractResult || extractError) && (
+        <div className="pointer-events-auto absolute right-3 top-12 w-[300px] rounded-md border border-ink-700 bg-ink-800/95 p-3 text-xs text-ink-100 shadow-lg">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="font-semibold">提取结果</span>
+            <button
+              onClick={() => {
+                setExtractResult(null);
+                setExtractError(null);
+              }}
+              className="text-ink-400 hover:text-ink-200"
+            >
+              ✕
+            </button>
+          </div>
+          {extractError ? (
+            <div className="text-red-300">失败：{extractError}</div>
+          ) : extractResult ? (
+            <div className="space-y-1 text-ink-300">
+              <div>✓ 新增人物：{extractResult.charactersInserted}</div>
+              <div>✓ 新增条目：{extractResult.entriesInserted}</div>
+              <div>✓ 新增关系：{extractResult.relationshipsInserted}</div>
+              <div className="pt-1 text-ink-500">
+                {extractResult.bookCharsUsed < extractResult.bookCharsTotal
+                  ? `仅扫描前 ${extractResult.bookCharsUsed} / ${extractResult.bookCharsTotal} 字（截断）`
+                  : `扫描全书 ${extractResult.bookCharsTotal} 字`}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       <div className="pointer-events-auto absolute inset-x-3 bottom-3 rounded-lg border border-ink-700 bg-ink-800/85 p-3 text-[11px] text-ink-200 shadow backdrop-blur">
         <div className="mb-1 flex items-center justify-between">
