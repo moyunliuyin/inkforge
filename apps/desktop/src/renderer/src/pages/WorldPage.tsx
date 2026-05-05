@@ -6,10 +6,12 @@ import { WorldCategorySidebar } from "../components/world/WorldCategorySidebar";
 import { WorldEntryList } from "../components/world/WorldEntryList";
 import { WorldEntryDetail } from "../components/world/WorldEntryDetail";
 import { WorldGraph } from "../components/world/WorldGraph";
+import { WorldNebulaGraph } from "../components/world/WorldNebulaGraph";
 import { ProjectSwitcher } from "../components/ProjectSwitcher";
 
 const DRAFT_ID = "__draft__";
 type WorldTab = "entries" | "graph";
+type GraphMode = "nebula" | "hierarchy";
 
 export function WorldPage(): JSX.Element {
   const currentProjectId = useAppStore((s) => s.currentProjectId);
@@ -20,6 +22,7 @@ export function WorldPage(): JSX.Element {
   const searchQuery = useAppStore((s) => s.worldSearchQuery);
   const setSearchQuery = useAppStore((s) => s.setWorldSearchQuery);
   const [tab, setTab] = useState<WorldTab>("entries");
+  const [graphMode, setGraphMode] = useState<GraphMode>("nebula");
   const pageProjectSwitcher = useAppStore((s) => s.settings.pageProjectSwitcher);
 
   const allEntriesQuery = useQuery({
@@ -124,8 +127,28 @@ export function WorldPage(): JSX.Element {
           />
         </div>
       ) : (
-        <div className="flex-1 overflow-hidden">
-          <WorldGraph projectId={currentProjectId} />
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="flex shrink-0 items-center gap-1 border-b border-ink-700 px-3 py-1 text-[11px]">
+            <button
+              className={`rounded-md px-2 py-0.5 ${graphMode === "nebula" ? "bg-amber-500/20 text-amber-300" : "text-ink-400 hover:bg-ink-800"}`}
+              onClick={() => setGraphMode("nebula")}
+            >
+              🌌 星云
+            </button>
+            <button
+              className={`rounded-md px-2 py-0.5 ${graphMode === "hierarchy" ? "bg-amber-500/20 text-amber-300" : "text-ink-400 hover:bg-ink-800"}`}
+              onClick={() => setGraphMode("hierarchy")}
+            >
+              🌲 层级
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            {graphMode === "nebula" ? (
+              <WorldNebulaGraph projectId={currentProjectId} />
+            ) : (
+              <WorldGraph projectId={currentProjectId} />
+            )}
+          </div>
         </div>
       )}
     </div>

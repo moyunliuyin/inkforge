@@ -51,7 +51,8 @@
     "better-sqlite3": "^11.5.0",
     "electron-log": "^5.2.0",
     "electron-updater": "^6.3.9",
-    "node-pty": "^1.0.0"
+    "node-pty": "^1.0.0",
+    "react-force-graph-2d": "^1.29.1"
   },
   "devDependencies": {
     "@inkforge/auto-writer-engine": "workspace:*",
