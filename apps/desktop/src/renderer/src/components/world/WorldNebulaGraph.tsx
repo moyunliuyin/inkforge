@@ -515,9 +515,10 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
         dragStateRef.current = { draggedId: node.id, offsets };
         state = dragStateRef.current;
       }
-      // Soft follow: nudge neighbor velocities toward target position.
-      // d3-force collide/link/decay handle the rest — gives spring-like
-      // delay + inertia rather than rigid lock-step translation.
+      // Soft follow: nudge neighbor velocities toward target position with
+      // small per-frame cap so fast drag doesn't yank neighbors abruptly.
+      const NUDGE_K = 0.15;
+      const MAX_NUDGE = 4;
       for (const [otherId, offset] of state.offsets) {
         const other = graphData.nodes.find((n) => n.id === otherId) as
           | (NebulaNode & { vx?: number; vy?: number })
@@ -525,10 +526,12 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
         if (!other || other.x == null || other.y == null) continue;
         const targetX = (node.x ?? 0) + offset.dx;
         const targetY = (node.y ?? 0) + offset.dy;
-        const ddx = targetX - other.x;
-        const ddy = targetY - other.y;
-        other.vx = (other.vx ?? 0) + ddx * 0.25;
-        other.vy = (other.vy ?? 0) + ddy * 0.25;
+        const ddx = (targetX - other.x) * NUDGE_K;
+        const ddy = (targetY - other.y) * NUDGE_K;
+        const cdx = Math.max(-MAX_NUDGE, Math.min(MAX_NUDGE, ddx));
+        const cdy = Math.max(-MAX_NUDGE, Math.min(MAX_NUDGE, ddy));
+        other.vx = (other.vx ?? 0) + cdx;
+        other.vy = (other.vy ?? 0) + cdy;
       }
     },
     [graphData.links, graphData.nodes],
