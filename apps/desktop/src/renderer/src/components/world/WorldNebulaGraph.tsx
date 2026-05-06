@@ -273,22 +273,44 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
     const worldEntries = worldsQuery.data ?? [];
     const relationships = relationshipsQuery.data ?? [];
 
+    // Compute degree (connection count) per node id
+    const degree = new Map<string, number>();
+    for (const r of relationships) {
+      const sk = makeNodeId(r.srcKind, r.srcId);
+      const dk = makeNodeId(r.dstKind, r.dstId);
+      degree.set(sk, (degree.get(sk) ?? 0) + 1);
+      degree.set(dk, (degree.get(dk) ?? 0) + 1);
+    }
+    // Tier the node into satellite / planet / star / galactic-core based on degree
+    const tierSize = (deg: number, base: number) => {
+      if (deg >= 10) return base * 2.4; // galactic core
+      if (deg >= 5) return base * 1.85; // star
+      if (deg >= 2) return base * 1.35; // planet
+      return base; // satellite
+    };
+
     const nodes: NebulaNode[] = [
-      ...characters.map((c: NovelCharacterRecord) => ({
-        id: makeNodeId("character", c.id),
-        kind: "character" as const,
-        label: c.name,
-        color: "#3b82f6",
-        size: 8,
-      })),
-      ...worldEntries.map((w: WorldEntryRecord) => ({
-        id: makeNodeId("world_entry", w.id),
-        kind: "world_entry" as const,
-        label: w.title,
-        category: w.category,
-        color: categoryColor(w.category),
-        size: 6,
-      })),
+      ...characters.map((c: NovelCharacterRecord) => {
+        const id = makeNodeId("character", c.id);
+        return {
+          id,
+          kind: "character" as const,
+          label: c.name,
+          color: "#3b82f6",
+          size: tierSize(degree.get(id) ?? 0, 8),
+        };
+      }),
+      ...worldEntries.map((w: WorldEntryRecord) => {
+        const id = makeNodeId("world_entry", w.id);
+        return {
+          id,
+          kind: "world_entry" as const,
+          label: w.title,
+          category: w.category,
+          color: categoryColor(w.category),
+          size: tierSize(degree.get(id) ?? 0, 6),
+        };
+      }),
     ];
 
     const links: NebulaLink[] = relationships.map((r: WorldRelationshipRecord) => ({
@@ -310,13 +332,13 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
     const linkForce = fg.d3Force("link") as
       | { distance?: (n: number) => unknown; strength?: (n: number) => unknown }
       | undefined;
-    if (linkForce?.distance) linkForce.distance(110);
-    if (linkForce?.strength) linkForce.strength(0.6);
+    if (linkForce?.distance) linkForce.distance(150);
+    if (linkForce?.strength) linkForce.strength(0.25);
     const chargeForce = fg.d3Force("charge") as
       | { strength?: (n: number) => unknown; distanceMax?: (n: number) => unknown }
       | undefined;
-    if (chargeForce?.strength) chargeForce.strength(-180);
-    if (chargeForce?.distanceMax) chargeForce.distanceMax(300);
+    if (chargeForce?.strength) chargeForce.strength(-260);
+    if (chargeForce?.distanceMax) chargeForce.distanceMax(360);
     const centerForce = fg.d3Force("center") as
       | { strength?: (n: number) => unknown }
       | undefined;
