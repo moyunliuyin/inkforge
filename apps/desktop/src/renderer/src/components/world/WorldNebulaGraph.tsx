@@ -28,6 +28,7 @@ interface NebulaNode {
   category?: string;
   color: string;
   size: number;
+  tier: 0 | 1 | 2 | 3; // 0=satellite, 1=planet, 2=star, 3=galactic-core
   x?: number;
   y?: number;
   fx?: number;
@@ -282,33 +283,38 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
       degree.set(dk, (degree.get(dk) ?? 0) + 1);
     }
     // Tier the node into satellite / planet / star / galactic-core based on degree
-    const tierSize = (deg: number, base: number) => {
-      if (deg >= 10) return base * 2.4; // galactic core
-      if (deg >= 5) return base * 1.85; // star
-      if (deg >= 2) return base * 1.35; // planet
-      return base; // satellite
+    const tierOf = (deg: number): 0 | 1 | 2 | 3 => {
+      if (deg >= 10) return 3;
+      if (deg >= 5) return 2;
+      if (deg >= 2) return 1;
+      return 0;
     };
+    const tierMul = [1, 1.35, 1.85, 2.4] as const;
 
     const nodes: NebulaNode[] = [
       ...characters.map((c: NovelCharacterRecord) => {
         const id = makeNodeId("character", c.id);
+        const t = tierOf(degree.get(id) ?? 0);
         return {
           id,
           kind: "character" as const,
           label: c.name,
           color: "#3b82f6",
-          size: tierSize(degree.get(id) ?? 0, 8),
+          size: 8 * tierMul[t],
+          tier: t,
         };
       }),
       ...worldEntries.map((w: WorldEntryRecord) => {
         const id = makeNodeId("world_entry", w.id);
+        const t = tierOf(degree.get(id) ?? 0);
         return {
           id,
           kind: "world_entry" as const,
           label: w.title,
           category: w.category,
           color: categoryColor(w.category),
-          size: tierSize(degree.get(id) ?? 0, 6),
+          size: 6 * tierMul[t],
+          tier: t,
         };
       }),
     ];
@@ -439,6 +445,19 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
   const handleNodeDragEnd = useCallback((node: NebulaNode) => {
     node.fx = node.x;
     node.fy = node.y;
+    const fg = fgRef.current;
+    const linkForce = fg?.d3Force("link") as
+      | { strength?: (n: number) => unknown }
+      | undefined;
+    if (linkForce?.strength) linkForce.strength(0.25);
+  }, []);
+
+  const handleNodeDrag = useCallback(() => {
+    const fg = fgRef.current;
+    const linkForce = fg?.d3Force("link") as
+      | { strength?: (n: number) => unknown }
+      | undefined;
+    if (linkForce?.strength) linkForce.strength(0.04);
   }, []);
 
   const handleNodeRightClick = useCallback(
@@ -538,6 +557,7 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
         onLinkClick={handleLinkClick as never}
         onBackgroundClick={handleBackgroundClick}
         onNodeHover={(n) => setHoverNodeId((n as NebulaNode | null)?.id ?? null)}
+        onNodeDrag={handleNodeDrag}
         onNodeDragEnd={handleNodeDragEnd as never}
         nodeCanvasObject={(node, ctx, globalScale) => {
           const n = node as NebulaNode;
@@ -548,18 +568,42 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
           const r = n.size + (isHover ? 2 : 0);
           const color = n.color;
 
-          // Outer glow halo (3x size, fades out) — uses HSL-shifted lighter rim
-          const haloAlpha = isHover ? 0.55 : isPending ? 0.65 : 0.32;
-          const halo = ctx.createRadialGradient(cx, cy, r * 0.6, cx, cy, r * 3.2);
+          // Outer glow halo (size depends on tier — bigger nodes glow further)
+          const haloMul = [3.2, 3.6, 4.4, 5.4][n.tier];
+          const haloAlpha = isHover ? 0.55 : isPending ? 0.65 : 0.32 + n.tier * 0.04;
+          const halo = ctx.createRadialGradient(cx, cy, r * 0.6, cx, cy, r * haloMul);
           halo.addColorStop(0, hslShift(color, 0.08, haloAlpha));
           halo.addColorStop(0.55, hslShift(color, -0.05, 0.1));
           halo.addColorStop(1, hslShift(color, -0.1, 0));
           ctx.fillStyle = halo;
           ctx.beginPath();
-          ctx.arc(cx, cy, r * 3.2, 0, 2 * Math.PI);
+          ctx.arc(cx, cy, r * haloMul, 0, 2 * Math.PI);
           ctx.fill();
 
-          // Atmospheric ring (1.35x radius, lighter rim — gives planet "atmosphere")
+          // Star+ corona spikes (12 short rays)
+          if (n.tier >= 2) {
+            ctx.save();
+            ctx.translate(cx, cy);
+            const spikes = n.tier === 3 ? 16 : 12;
+            const spikeLen = n.tier === 3 ? r * 0.7 : r * 0.5;
+            ctx.strokeStyle = hslShift(color, 0.18, 0.55);
+            ctx.lineWidth = n.tier === 3 ? 1.4 : 1;
+            ctx.lineCap = "round";
+            for (let i = 0; i < spikes; i++) {
+              const ang = (i / spikes) * 2 * Math.PI;
+              const x1 = Math.cos(ang) * r * 1.15;
+              const y1 = Math.sin(ang) * r * 1.15;
+              const x2 = Math.cos(ang) * (r * 1.15 + spikeLen);
+              const y2 = Math.sin(ang) * (r * 1.15 + spikeLen);
+              ctx.beginPath();
+              ctx.moveTo(x1, y1);
+              ctx.lineTo(x2, y2);
+              ctx.stroke();
+            }
+            ctx.restore();
+          }
+
+          // Atmospheric ring (1.35x radius, lighter rim)
           const atmo = ctx.createRadialGradient(cx, cy, r * 0.95, cx, cy, r * 1.35);
           atmo.addColorStop(0, hslShift(color, 0.1, 0));
           atmo.addColorStop(0.5, hslShift(color, 0.15, 0.35));
@@ -591,6 +635,24 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
           ctx.lineWidth = isPending ? 2.5 : isHover ? 1.6 : 0.9;
           ctx.strokeStyle = isPending ? "#fbbf24" : isHover ? "#fde68a" : `${color}aa`;
           ctx.stroke();
+
+          // Galactic-core orbital ring (Saturn-like tilted ellipse)
+          if (n.tier === 3) {
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(-Math.PI / 7);
+            ctx.beginPath();
+            ctx.ellipse(0, 0, r * 1.7, r * 0.4, 0, 0, 2 * Math.PI);
+            ctx.lineWidth = 1.4;
+            ctx.strokeStyle = hslShift(color, 0.25, 0.7);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.ellipse(0, 0, r * 1.95, r * 0.55, 0, 0, 2 * Math.PI);
+            ctx.lineWidth = 0.7;
+            ctx.strokeStyle = hslShift(color, 0.3, 0.4);
+            ctx.stroke();
+            ctx.restore();
+          }
 
           // Specular highlight (small white dot, gives glossy sphere feel)
           ctx.beginPath();
