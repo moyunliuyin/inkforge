@@ -525,16 +525,33 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
   const handleNodeDragEnd = useCallback((node: NebulaNode) => {
     node.fx = node.x;
     node.fy = node.y;
+    // Clear neighbor velocities so the simulation restart doesn't shake
+    // them violently — they should rest where they were nudged to.
+    const state = dragStateRef.current;
+    if (state) {
+      for (const otherId of state.offsets.keys()) {
+        const other = graphData.nodes.find((n) => n.id === otherId) as
+          | (NebulaNode & { vx?: number; vy?: number })
+          | undefined;
+        if (other) {
+          other.vx = 0;
+          other.vy = 0;
+        }
+      }
+    }
     dragStateRef.current = null;
+    // Restore link force strength
     const fg = fgRef.current;
-    fg?.d3ReheatSimulation();
-  }, []);
+    const linkForce = fg?.d3Force("link") as
+      | { strength?: (n: number) => unknown }
+      | undefined;
+    if (linkForce?.strength) linkForce.strength(0.25);
+  }, [graphData.nodes]);
 
   const handleNodeDrag = useCallback(
     (node: NebulaNode) => {
       let state = dragStateRef.current;
       if (!state || state.draggedId !== node.id) {
-        // First tick of drag — capture neighbor offsets relative to dragged node
         const offsets = new Map<string, { dx: number; dy: number }>();
         for (const link of graphData.links) {
           if (link.relId.startsWith("__synthetic_")) continue;
@@ -553,11 +570,18 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
         }
         dragStateRef.current = { draggedId: node.id, offsets };
         state = dragStateRef.current;
+        // Disable link force during drag — let nudge be the sole controller
+        // of neighbor position so they keep angular distribution around the
+        // dragged node rather than collapsing toward it.
+        const fg = fgRef.current;
+        const linkForce = fg?.d3Force("link") as
+          | { strength?: (n: number) => unknown }
+          | undefined;
+        if (linkForce?.strength) linkForce.strength(0);
       }
-      // Soft follow: nudge neighbor velocities toward target position with
-      // small per-frame cap so fast drag doesn't yank neighbors abruptly.
-      const NUDGE_K = 0.15;
-      const MAX_NUDGE = 4;
+      // Stronger nudge now that link force is silent. cap still prevents yank.
+      const NUDGE_K = 0.3;
+      const MAX_NUDGE = 8;
       for (const [otherId, offset] of state.offsets) {
         const other = graphData.nodes.find((n) => n.id === otherId) as
           | (NebulaNode & { vx?: number; vy?: number })
