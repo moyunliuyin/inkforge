@@ -72,6 +72,68 @@ function shadeColor(hex: string, percent: number): string {
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
 }
 
+/** Hex → HSL tuple [h 0-360, s 0-1, l 0-1]. */
+function hexToHsl(hex: string): [number, number, number] {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return [0, 0, 0.5];
+  const n = parseInt(m[1], 16);
+  const r = ((n >> 16) & 0xff) / 255;
+  const g = ((n >> 8) & 0xff) / 255;
+  const b = (n & 0xff) / 255;
+  const max = Math.max(r, g, b),
+    min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  let h = 0,
+    s = 0;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+    else if (max === g) h = ((b - r) / d + 2) * 60;
+    else h = ((r - g) / d + 4) * 60;
+  }
+  return [h, s, l];
+}
+
+/** RGB string from hex with overrides on l (lightness, 0-1) and alpha (0-1). */
+function hslShift(hex: string, dl: number, alpha = 1): string {
+  const [h, s, l] = hexToHsl(hex);
+  const lc = Math.max(0, Math.min(1, l + dl));
+  // HSL → RGB
+  const q = lc < 0.5 ? lc * (1 + s) : lc + s - lc * s;
+  const p = 2 * lc - q;
+  const hk = h / 360;
+  const tc = (t: number) => {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  const r = Math.round(tc(hk + 1 / 3) * 255);
+  const g = Math.round(tc(hk) * 255);
+  const b = Math.round(tc(hk - 1 / 3) * 255);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/** Custom d3-force: pull each node individually toward origin on one axis. */
+function makeAxisAttractor(axis: "x" | "y", strength: number) {
+  type SimNode = { x?: number; y?: number; vx?: number; vy?: number };
+  let nodes: SimNode[] = [];
+  const force = (alpha: number): void => {
+    const v = `v${axis}` as "vx" | "vy";
+    for (const node of nodes) {
+      const pos = (node as Record<string, number | undefined>)[axis] ?? 0;
+      node[v] = (node[v] ?? 0) - pos * strength * alpha;
+    }
+  };
+  (force as unknown as { initialize: (n: SimNode[]) => void }).initialize = (n) => {
+    nodes = n;
+  };
+  return force;
+}
+
 interface WorldNebulaGraphProps {
   projectId: string;
 }
@@ -259,6 +321,10 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
       | { strength?: (n: number) => unknown }
       | undefined;
     if (centerForce?.strength) centerForce.strength(0.15);
+    // Strong per-node anchor: pull every node toward (0,0) so isolated nodes
+    // and connected clusters cannot drift away from the origin.
+    fg.d3Force("attractX", makeAxisAttractor("x", 0.06));
+    fg.d3Force("attractY", makeAxisAttractor("y", 0.06));
     fg.d3ReheatSimulation();
   }, [baseGraphData]);
 
@@ -460,18 +526,28 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
           const r = n.size + (isHover ? 2 : 0);
           const color = n.color;
 
-          // Outer glow halo (3x size, fades out)
+          // Outer glow halo (3x size, fades out) — uses HSL-shifted lighter rim
           const haloAlpha = isHover ? 0.55 : isPending ? 0.65 : 0.32;
           const halo = ctx.createRadialGradient(cx, cy, r * 0.6, cx, cy, r * 3.2);
-          halo.addColorStop(0, `${color}${Math.round(haloAlpha * 255).toString(16).padStart(2, "0")}`);
-          halo.addColorStop(0.55, `${color}1a`);
-          halo.addColorStop(1, `${color}00`);
+          halo.addColorStop(0, hslShift(color, 0.08, haloAlpha));
+          halo.addColorStop(0.55, hslShift(color, -0.05, 0.1));
+          halo.addColorStop(1, hslShift(color, -0.1, 0));
           ctx.fillStyle = halo;
           ctx.beginPath();
           ctx.arc(cx, cy, r * 3.2, 0, 2 * Math.PI);
           ctx.fill();
 
-          // Planet body — radial gradient for sphere illusion
+          // Atmospheric ring (1.35x radius, lighter rim — gives planet "atmosphere")
+          const atmo = ctx.createRadialGradient(cx, cy, r * 0.95, cx, cy, r * 1.35);
+          atmo.addColorStop(0, hslShift(color, 0.1, 0));
+          atmo.addColorStop(0.5, hslShift(color, 0.15, 0.35));
+          atmo.addColorStop(1, hslShift(color, 0.2, 0));
+          ctx.fillStyle = atmo;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r * 1.35, 0, 2 * Math.PI);
+          ctx.fill();
+
+          // Planet body — HSL gradient: bright top-left → mid hue → dark edge
           const sphere = ctx.createRadialGradient(
             cx - r * 0.35,
             cy - r * 0.4,
@@ -480,9 +556,10 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
             cy,
             r * 1.05,
           );
-          sphere.addColorStop(0, "#ffffffcc");
-          sphere.addColorStop(0.18, color);
-          sphere.addColorStop(1, shadeColor(color, -45));
+          sphere.addColorStop(0, hslShift(color, 0.32, 1));
+          sphere.addColorStop(0.22, hslShift(color, 0.08, 1));
+          sphere.addColorStop(0.65, color);
+          sphere.addColorStop(1, hslShift(color, -0.28, 1));
           ctx.beginPath();
           ctx.arc(cx, cy, r, 0, 2 * Math.PI);
           ctx.fillStyle = sphere;
