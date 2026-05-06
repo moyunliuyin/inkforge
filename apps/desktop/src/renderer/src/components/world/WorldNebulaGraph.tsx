@@ -60,6 +60,18 @@ function categoryColor(category?: string): string {
   return CATEGORY_COLOR[category] ?? "#475569";
 }
 
+/** Shade a hex color by percent: -100..0 darken, 0..100 lighten. */
+function shadeColor(hex: string, percent: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const num = parseInt(m[1], 16);
+  const p = percent / 100;
+  const r = Math.max(0, Math.min(255, ((num >> 16) & 0xff) + Math.round(255 * p)));
+  const g = Math.max(0, Math.min(255, ((num >> 8) & 0xff) + Math.round(255 * p)));
+  const b = Math.max(0, Math.min(255, (num & 0xff) + Math.round(255 * p)));
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
+}
+
 interface WorldNebulaGraphProps {
   projectId: string;
 }
@@ -233,13 +245,20 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
   useEffect(() => {
     const fg = fgRef.current;
     if (!fg) return;
-    const linkForce = fg.d3Force("link") as { distance?: (n: number) => unknown } | undefined;
+    const linkForce = fg.d3Force("link") as
+      | { distance?: (n: number) => unknown; strength?: (n: number) => unknown }
+      | undefined;
     if (linkForce?.distance) linkForce.distance(110);
+    if (linkForce?.strength) linkForce.strength(0.6);
     const chargeForce = fg.d3Force("charge") as
       | { strength?: (n: number) => unknown; distanceMax?: (n: number) => unknown }
       | undefined;
-    if (chargeForce?.strength) chargeForce.strength(-220);
-    if (chargeForce?.distanceMax) chargeForce.distanceMax(360);
+    if (chargeForce?.strength) chargeForce.strength(-180);
+    if (chargeForce?.distanceMax) chargeForce.distanceMax(300);
+    const centerForce = fg.d3Force("center") as
+      | { strength?: (n: number) => unknown }
+      | undefined;
+    if (centerForce?.strength) centerForce.strength(0.15);
     fg.d3ReheatSimulation();
   }, [baseGraphData]);
 
@@ -423,9 +442,9 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
         linkDirectionalParticleColor={(l) =>
           (l as NebulaLink).relId.startsWith("__synthetic_") ? "#fbbf24" : "#94a3b8"
         }
-        cooldownTicks={120}
-        d3AlphaDecay={0.02}
-        d3VelocityDecay={0.3}
+        cooldownTicks={300}
+        d3AlphaDecay={0.018}
+        d3VelocityDecay={0.55}
         onNodeClick={handleNodeClick as never}
         onNodeRightClick={handleNodeRightClick as never}
         onLinkClick={handleLinkClick as never}
@@ -436,34 +455,60 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
           const n = node as NebulaNode;
           const isPending = pendingSrcId === n.id;
           const isHover = hoverNodeId === n.id;
+          const cx = n.x ?? 0;
+          const cy = n.y ?? 0;
           const r = n.size + (isHover ? 2 : 0);
+          const color = n.color;
 
-          // Glow halo on hover or pending
-          if (isHover || isPending) {
-            ctx.beginPath();
-            ctx.arc(n.x ?? 0, n.y ?? 0, r + 6, 0, 2 * Math.PI);
-            ctx.fillStyle = isPending ? "#fbbf2433" : `${n.color}33`;
-            ctx.fill();
-          }
-
-          // Node fill
+          // Outer glow halo (3x size, fades out)
+          const haloAlpha = isHover ? 0.55 : isPending ? 0.65 : 0.32;
+          const halo = ctx.createRadialGradient(cx, cy, r * 0.6, cx, cy, r * 3.2);
+          halo.addColorStop(0, `${color}${Math.round(haloAlpha * 255).toString(16).padStart(2, "0")}`);
+          halo.addColorStop(0.55, `${color}1a`);
+          halo.addColorStop(1, `${color}00`);
+          ctx.fillStyle = halo;
           ctx.beginPath();
-          ctx.arc(n.x ?? 0, n.y ?? 0, r, 0, 2 * Math.PI);
-          ctx.fillStyle = n.color;
+          ctx.arc(cx, cy, r * 3.2, 0, 2 * Math.PI);
           ctx.fill();
 
-          // Stroke (border)
-          ctx.lineWidth = isPending ? 2.5 : isHover ? 1.5 : 1;
-          ctx.strokeStyle = isPending ? "#fbbf24" : "#1e293b";
+          // Planet body — radial gradient for sphere illusion
+          const sphere = ctx.createRadialGradient(
+            cx - r * 0.35,
+            cy - r * 0.4,
+            0,
+            cx,
+            cy,
+            r * 1.05,
+          );
+          sphere.addColorStop(0, "#ffffffcc");
+          sphere.addColorStop(0.18, color);
+          sphere.addColorStop(1, shadeColor(color, -45));
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+          ctx.fillStyle = sphere;
+          ctx.fill();
+
+          // Outer ring (orbital): stronger for pending/hover
+          ctx.lineWidth = isPending ? 2.5 : isHover ? 1.6 : 0.9;
+          ctx.strokeStyle = isPending ? "#fbbf24" : isHover ? "#fde68a" : `${color}aa`;
           ctx.stroke();
 
-          // Pinned indicator (small dot at corner if fx set)
+          // Specular highlight (small white dot, gives glossy sphere feel)
+          ctx.beginPath();
+          ctx.arc(cx - r * 0.35, cy - r * 0.4, r * 0.18, 0, 2 * Math.PI);
+          ctx.fillStyle = "#ffffff66";
+          ctx.fill();
+
+          // Pinned indicator (gold dot at NE corner)
           const nn = n as unknown as { fx?: number; fy?: number };
           if (nn.fx !== undefined && nn.fy !== undefined) {
             ctx.beginPath();
-            ctx.arc((n.x ?? 0) + r * 0.7, (n.y ?? 0) - r * 0.7, 1.8, 0, 2 * Math.PI);
+            ctx.arc(cx + r * 0.75, cy - r * 0.75, 1.8, 0, 2 * Math.PI);
             ctx.fillStyle = "#fbbf24";
+            ctx.shadowColor = "#fbbf24";
+            ctx.shadowBlur = 4;
             ctx.fill();
+            ctx.shadowBlur = 0;
           }
 
           // Label with stroke for readability over any background
@@ -472,10 +517,10 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
           ctx.textAlign = "center";
           ctx.textBaseline = "top";
           ctx.lineWidth = 3;
-          ctx.strokeStyle = "rgba(11, 18, 32, 0.85)";
-          ctx.strokeText(n.label, n.x ?? 0, (n.y ?? 0) + r + 3);
+          ctx.strokeStyle = "rgba(6, 9, 18, 0.9)";
+          ctx.strokeText(n.label, cx, cy + r + 4);
           ctx.fillStyle = isHover ? "#fde68a" : "#e2e8f0";
-          ctx.fillText(n.label, n.x ?? 0, (n.y ?? 0) + r + 3);
+          ctx.fillText(n.label, cx, cy + r + 4);
         }}
       />
 
