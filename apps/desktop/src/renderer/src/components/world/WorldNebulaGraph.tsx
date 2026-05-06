@@ -486,22 +486,10 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
   const handleNodeDragEnd = useCallback((node: NebulaNode) => {
     node.fx = node.x;
     node.fy = node.y;
-    const state = dragStateRef.current;
-    if (state) {
-      for (const otherId of state.offsets.keys()) {
-        const other = graphData.nodes.find((n) => n.id === otherId) as
-          | (NebulaNode & { fx?: number; fy?: number })
-          | undefined;
-        if (other) {
-          delete (other as unknown as Record<string, unknown>).fx;
-          delete (other as unknown as Record<string, unknown>).fy;
-        }
-      }
-      dragStateRef.current = null;
-    }
+    dragStateRef.current = null;
     const fg = fgRef.current;
     fg?.d3ReheatSimulation();
-  }, [graphData.nodes]);
+  }, []);
 
   const handleNodeDrag = useCallback(
     (node: NebulaNode) => {
@@ -527,14 +515,20 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
         dragStateRef.current = { draggedId: node.id, offsets };
         state = dragStateRef.current;
       }
-      // Lock neighbors to maintain relative positions (rigid-body translation)
+      // Soft follow: nudge neighbor velocities toward target position.
+      // d3-force collide/link/decay handle the rest — gives spring-like
+      // delay + inertia rather than rigid lock-step translation.
       for (const [otherId, offset] of state.offsets) {
         const other = graphData.nodes.find((n) => n.id === otherId) as
-          | (NebulaNode & { fx?: number; fy?: number })
+          | (NebulaNode & { vx?: number; vy?: number })
           | undefined;
-        if (!other) continue;
-        other.fx = (node.x ?? 0) + offset.dx;
-        other.fy = (node.y ?? 0) + offset.dy;
+        if (!other || other.x == null || other.y == null) continue;
+        const targetX = (node.x ?? 0) + offset.dx;
+        const targetY = (node.y ?? 0) + offset.dy;
+        const ddx = targetX - other.x;
+        const ddy = targetY - other.y;
+        other.vx = (other.vx ?? 0) + ddx * 0.25;
+        other.vy = (other.vy ?? 0) + ddy * 0.25;
       }
     },
     [graphData.links, graphData.nodes],
