@@ -135,6 +135,40 @@ function makeAxisAttractor(axis: "x" | "y", strength: number) {
   return force;
 }
 
+/** Custom d3-force: prevent node overlap by pushing them apart when distance < radius. */
+function makeCollideForce(radiusFn: (n: { size?: number }) => number) {
+  type SimNode = { x?: number; y?: number; vx?: number; vy?: number; size?: number };
+  let nodes: SimNode[] = [];
+  const force = (alpha: number): void => {
+    for (let i = 0; i < nodes.length; i++) {
+      const ni = nodes[i];
+      const ri = radiusFn(ni);
+      for (let j = i + 1; j < nodes.length; j++) {
+        const nj = nodes[j];
+        const rj = radiusFn(nj);
+        const dx = (nj.x ?? 0) - (ni.x ?? 0);
+        const dy = (nj.y ?? 0) - (ni.y ?? 0);
+        const distSq = dx * dx + dy * dy;
+        const minDist = ri + rj;
+        if (distSq < minDist * minDist && distSq > 0.01) {
+          const dist = Math.sqrt(distSq);
+          const overlap = (minDist - dist) / dist;
+          const px = dx * overlap * 0.5 * alpha;
+          const py = dy * overlap * 0.5 * alpha;
+          ni.vx = (ni.vx ?? 0) - px;
+          ni.vy = (ni.vy ?? 0) - py;
+          nj.vx = (nj.vx ?? 0) + px;
+          nj.vy = (nj.vy ?? 0) + py;
+        }
+      }
+    }
+  };
+  (force as unknown as { initialize: (n: SimNode[]) => void }).initialize = (n) => {
+    nodes = n;
+  };
+  return force;
+}
+
 interface WorldNebulaGraphProps {
   projectId: string;
 }
@@ -353,6 +387,8 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
     // and connected clusters cannot drift away from the origin.
     fg.d3Force("attractX", makeAxisAttractor("x", 0.06));
     fg.d3Force("attractY", makeAxisAttractor("y", 0.06));
+    // Hard collision: nodes can't overlap, prevents drag-pile-up
+    fg.d3Force("collide", makeCollideForce((n) => (n.size ?? 8) * 2.4));
     fg.d3ReheatSimulation();
   }, [baseGraphData]);
 
@@ -457,7 +493,7 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
     const linkForce = fg?.d3Force("link") as
       | { strength?: (n: number) => unknown }
       | undefined;
-    if (linkForce?.strength) linkForce.strength(0.04);
+    if (linkForce?.strength) linkForce.strength(0.15);
   }, []);
 
   const handleNodeRightClick = useCallback(
