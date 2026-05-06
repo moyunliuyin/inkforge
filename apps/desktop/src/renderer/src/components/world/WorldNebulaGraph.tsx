@@ -587,22 +587,22 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
           | undefined;
         if (linkForce?.strength) linkForce.strength(0);
       }
-      // Stronger nudge now that link force is silent. cap still prevents yank.
-      const NUDGE_K = 0.3;
-      const MAX_NUDGE = 8;
+      // P-controller follow: velocity proportional to position error,
+      // overwrites previous velocity each frame to avoid accumulation
+      // oscillation ("jittery"). d3 velocityDecay handles damping.
+      const P_GAIN = 0.2;
+      const MAX_VEL = 18;
       for (const [otherId, offset] of state.offsets) {
         const other = graphData.nodes.find((n) => n.id === otherId) as
           | (NebulaNode & { vx?: number; vy?: number })
           | undefined;
         if (!other || other.x == null || other.y == null) continue;
-        const targetX = (node.x ?? 0) + offset.dx;
-        const targetY = (node.y ?? 0) + offset.dy;
-        const ddx = (targetX - other.x) * NUDGE_K;
-        const ddy = (targetY - other.y) * NUDGE_K;
-        const cdx = Math.max(-MAX_NUDGE, Math.min(MAX_NUDGE, ddx));
-        const cdy = Math.max(-MAX_NUDGE, Math.min(MAX_NUDGE, ddy));
-        other.vx = (other.vx ?? 0) + cdx;
-        other.vy = (other.vy ?? 0) + cdy;
+        const errX = (node.x ?? 0) + offset.dx - other.x;
+        const errY = (node.y ?? 0) + offset.dy - other.y;
+        const vx = Math.max(-MAX_VEL, Math.min(MAX_VEL, errX * P_GAIN));
+        const vy = Math.max(-MAX_VEL, Math.min(MAX_VEL, errY * P_GAIN));
+        other.vx = vx;
+        other.vy = vy;
       }
     },
     [graphData.links, graphData.nodes],
