@@ -571,6 +571,10 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
             dx: other.x - (node.x ?? 0),
             dy: other.y - (node.y ?? 0),
           });
+          // Release any pin from a previous drag so this drag's nudge can move them
+          const o = other as unknown as Record<string, unknown>;
+          delete o.fx;
+          delete o.fy;
         }
         dragStateRef.current = { draggedId: node.id, offsets };
         state = dragStateRef.current;
