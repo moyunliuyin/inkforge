@@ -228,14 +228,18 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
     return { nodes, links };
   }, [charactersQuery.data, worldsQuery.data, relationshipsQuery.data]);
 
-  // Tune force simulation: spread nodes apart so labels don't overlap
+  // Tune force simulation: spread nodes apart so labels don't overlap,
+  // but use a gentle radial force to keep isolated nodes from drifting away
   useEffect(() => {
     const fg = fgRef.current;
     if (!fg) return;
     const linkForce = fg.d3Force("link") as { distance?: (n: number) => unknown } | undefined;
-    if (linkForce?.distance) linkForce.distance(120);
-    const chargeForce = fg.d3Force("charge") as { strength?: (n: number) => unknown } | undefined;
-    if (chargeForce?.strength) chargeForce.strength(-380);
+    if (linkForce?.distance) linkForce.distance(110);
+    const chargeForce = fg.d3Force("charge") as
+      | { strength?: (n: number) => unknown; distanceMax?: (n: number) => unknown }
+      | undefined;
+    if (chargeForce?.strength) chargeForce.strength(-220);
+    if (chargeForce?.distanceMax) chargeForce.distanceMax(360);
     fg.d3ReheatSimulation();
   }, [baseGraphData]);
 
@@ -386,7 +390,8 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
   };
 
   return (
-    <div ref={containerRef} className="relative h-full w-full overflow-hidden bg-ink-900">
+    <div ref={containerRef} className="relative h-full w-full overflow-hidden">
+      <NebulaBackdrop />
       {baseGraphData.nodes.length === 0 && (
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
           <div className="pointer-events-auto rounded-lg border border-ink-700 bg-ink-800/80 px-6 py-4 text-center text-sm text-ink-300 backdrop-blur">
@@ -400,7 +405,7 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
         graphData={graphData}
         width={size.width}
         height={size.height}
-        backgroundColor="#0b1220"
+        backgroundColor="rgba(0,0,0,0)"
         nodeRelSize={6}
         nodeLabel={(n) => (n as NebulaNode).label}
         nodeColor={(n) => (n as NebulaNode).color}
@@ -911,6 +916,74 @@ function TimelineEditor({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// NebulaBackdrop · 太空星云背景：径向渐变雾气 + 随机 twinkle 星点
+// =====================================================================
+
+interface Star {
+  x: number;
+  y: number;
+  size: number;
+  opacity: number;
+  delay: number;
+  hue: number;
+}
+
+function NebulaBackdrop(): JSX.Element {
+  const stars = useMemo<Star[]>(() => {
+    return Array.from({ length: 110 }, () => ({
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      size: Math.random() * 1.6 + 0.4,
+      opacity: Math.random() * 0.55 + 0.25,
+      delay: Math.random() * 4,
+      hue: Math.random() < 0.7 ? 0 : Math.random() < 0.5 ? 200 : 280,
+    }));
+  }, []);
+
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 overflow-hidden"
+      style={{
+        background:
+          "radial-gradient(ellipse 60% 50% at 28% 30%, rgba(124, 58, 237, 0.18), transparent 60%)," +
+          "radial-gradient(ellipse 70% 60% at 75% 75%, rgba(6, 182, 212, 0.10), transparent 60%)," +
+          "radial-gradient(ellipse 50% 40% at 55% 45%, rgba(244, 114, 182, 0.08), transparent 65%)," +
+          "radial-gradient(circle at 50% 50%, #0c1426 0%, #060912 70%, #03060e 100%)",
+      }}
+    >
+      {stars.map((s, i) => (
+        <span
+          key={i}
+          className="nebula-star absolute rounded-full"
+          style={{
+            left: `${s.x}%`,
+            top: `${s.y}%`,
+            width: `${s.size}px`,
+            height: `${s.size}px`,
+            backgroundColor:
+              s.hue === 0
+                ? "#ffffff"
+                : s.hue === 200
+                  ? "#bae6fd"
+                  : "#f9a8d4",
+            opacity: s.opacity,
+            boxShadow: s.size > 1.2 ? `0 0 ${s.size * 2}px rgba(255,255,255,0.4)` : undefined,
+            animation: `nebulaTwinkle ${2 + (i % 5)}s ease-in-out ${s.delay}s infinite`,
+          }}
+        />
+      ))}
+      <style>{`
+        @keyframes nebulaTwinkle {
+          0%, 100% { opacity: var(--star-opacity, 0.5); transform: scale(1); }
+          50% { opacity: 0.95; transform: scale(1.4); }
+        }
+      `}</style>
     </div>
   );
 }
