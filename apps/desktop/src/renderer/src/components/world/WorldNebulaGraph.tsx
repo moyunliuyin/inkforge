@@ -119,16 +119,23 @@ function hslShift(hex: string, dl: number, alpha = 1): string {
 }
 
 /** Custom d3-force: pull each node individually toward origin on one axis.
- *  strength is read from a ref-like getter so it can be dynamically tuned
- *  (e.g. weakened during drag so neighbors aren't pulled back to origin). */
-function makeAxisAttractor(axis: "x" | "y", getStrength: () => number) {
-  type SimNode = { x?: number; y?: number; vx?: number; vy?: number };
+ *  strength is read from a ref-like getter so it can be dynamically tuned.
+ *  Only nodes whose id is NOT in `connectedSetGetter()` get pulled — connected
+ *  nodes are held in place by the link force already, so origin attraction
+ *  on them just yanks them toward (0,0) opposite the drag direction. */
+function makeAxisAttractor(
+  axis: "x" | "y",
+  getStrength: () => number,
+  isConnected: (id: string) => boolean,
+) {
+  type SimNode = { id?: string; x?: number; y?: number; vx?: number; vy?: number };
   let nodes: SimNode[] = [];
   const force = (alpha: number): void => {
     const strength = getStrength();
     if (strength === 0) return;
     const v = `v${axis}` as "vx" | "vy";
     for (const node of nodes) {
+      if (node.id && isConnected(node.id)) continue;
       const pos = (node as Record<string, number | undefined>)[axis] ?? 0;
       node[v] = (node[v] ?? 0) - pos * strength * alpha;
     }
@@ -389,8 +396,22 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
     if (centerForce?.strength) centerForce.strength(0.15);
     // Strong per-node anchor: pull every node toward (0,0) so isolated nodes
     // and connected clusters cannot drift away from the origin.
-    fg.d3Force("attractX", makeAxisAttractor("x", () => attractStrengthRef.current));
-    fg.d3Force("attractY", makeAxisAttractor("y", () => attractStrengthRef.current));
+    fg.d3Force(
+      "attractX",
+      makeAxisAttractor(
+        "x",
+        () => attractStrengthRef.current,
+        (id) => connectedSetRef.current.has(id),
+      ),
+    );
+    fg.d3Force(
+      "attractY",
+      makeAxisAttractor(
+        "y",
+        () => attractStrengthRef.current,
+        (id) => connectedSetRef.current.has(id),
+      ),
+    );
     // Hard collision: nodes can't overlap, prevents drag-pile-up
     fg.d3Force("collide", makeCollideForce((n) => (n.size ?? 8) * 2.4));
     fg.d3ReheatSimulation();
@@ -488,12 +509,23 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
   } | null>(null);
 
   const attractStrengthRef = useRef(0.06);
+  const connectedSetRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const set = new Set<string>();
+    for (const link of baseGraphData.links) {
+      const src = typeof link.source === "string" ? link.source : link.source.id;
+      const tgt = typeof link.target === "string" ? link.target : link.target.id;
+      set.add(src);
+      set.add(tgt);
+    }
+    connectedSetRef.current = set;
+  }, [baseGraphData.links]);
 
   const handleNodeDragEnd = useCallback((node: NebulaNode) => {
     node.fx = node.x;
     node.fy = node.y;
     dragStateRef.current = null;
-    attractStrengthRef.current = 0.06;
     const fg = fgRef.current;
     fg?.d3ReheatSimulation();
   }, []);
@@ -521,10 +553,6 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
         }
         dragStateRef.current = { draggedId: node.id, offsets };
         state = dragStateRef.current;
-        // Disable origin attraction during drag so neighbors aren't yanked
-        // back toward (0,0) — that's what caused them to clump on the side
-        // opposite to drag direction.
-        attractStrengthRef.current = 0;
       }
       // Soft follow: nudge neighbor velocities toward target position with
       // small per-frame cap so fast drag doesn't yank neighbors abruptly.
