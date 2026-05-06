@@ -525,17 +525,21 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
   const handleNodeDragEnd = useCallback((node: NebulaNode) => {
     node.fx = node.x;
     node.fy = node.y;
-    // Clear neighbor velocities so the simulation restart doesn't shake
-    // them violently — they should rest where they were nudged to.
+    // Clear neighbor velocities AND pin them at their current position so
+    // the simulation can't re-balance them after release. They keep the
+    // angular distribution they had during drag. User can release everything
+    // via the "重新发散" button.
     const state = dragStateRef.current;
     if (state) {
       for (const otherId of state.offsets.keys()) {
         const other = graphData.nodes.find((n) => n.id === otherId) as
-          | (NebulaNode & { vx?: number; vy?: number })
+          | (NebulaNode & { vx?: number; vy?: number; fx?: number; fy?: number })
           | undefined;
-        if (other) {
+        if (other && other.x != null && other.y != null) {
           other.vx = 0;
           other.vy = 0;
+          other.fx = other.x;
+          other.fy = other.y;
         }
       }
     }
