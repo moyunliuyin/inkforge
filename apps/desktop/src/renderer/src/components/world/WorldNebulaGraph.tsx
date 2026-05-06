@@ -478,23 +478,67 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
     setSelectedEdge(null);
   }, []);
 
+  const dragStateRef = useRef<{
+    draggedId: string;
+    offsets: Map<string, { dx: number; dy: number }>;
+  } | null>(null);
+
   const handleNodeDragEnd = useCallback((node: NebulaNode) => {
     node.fx = node.x;
     node.fy = node.y;
+    const state = dragStateRef.current;
+    if (state) {
+      for (const otherId of state.offsets.keys()) {
+        const other = graphData.nodes.find((n) => n.id === otherId) as
+          | (NebulaNode & { fx?: number; fy?: number })
+          | undefined;
+        if (other) {
+          delete (other as unknown as Record<string, unknown>).fx;
+          delete (other as unknown as Record<string, unknown>).fy;
+        }
+      }
+      dragStateRef.current = null;
+    }
     const fg = fgRef.current;
-    const linkForce = fg?.d3Force("link") as
-      | { strength?: (n: number) => unknown }
-      | undefined;
-    if (linkForce?.strength) linkForce.strength(0.25);
-  }, []);
+    fg?.d3ReheatSimulation();
+  }, [graphData.nodes]);
 
-  const handleNodeDrag = useCallback(() => {
-    const fg = fgRef.current;
-    const linkForce = fg?.d3Force("link") as
-      | { strength?: (n: number) => unknown }
-      | undefined;
-    if (linkForce?.strength) linkForce.strength(0.15);
-  }, []);
+  const handleNodeDrag = useCallback(
+    (node: NebulaNode) => {
+      let state = dragStateRef.current;
+      if (!state || state.draggedId !== node.id) {
+        // First tick of drag — capture neighbor offsets relative to dragged node
+        const offsets = new Map<string, { dx: number; dy: number }>();
+        for (const link of graphData.links) {
+          if (link.relId.startsWith("__synthetic_")) continue;
+          const src = typeof link.source === "string" ? link.source : link.source.id;
+          const tgt = typeof link.target === "string" ? link.target : link.target.id;
+          let otherId: string | null = null;
+          if (src === node.id) otherId = tgt;
+          else if (tgt === node.id) otherId = src;
+          if (!otherId) continue;
+          const other = graphData.nodes.find((n) => n.id === otherId);
+          if (!other || other.x == null || other.y == null) continue;
+          offsets.set(otherId, {
+            dx: other.x - (node.x ?? 0),
+            dy: other.y - (node.y ?? 0),
+          });
+        }
+        dragStateRef.current = { draggedId: node.id, offsets };
+        state = dragStateRef.current;
+      }
+      // Lock neighbors to maintain relative positions (rigid-body translation)
+      for (const [otherId, offset] of state.offsets) {
+        const other = graphData.nodes.find((n) => n.id === otherId) as
+          | (NebulaNode & { fx?: number; fy?: number })
+          | undefined;
+        if (!other) continue;
+        other.fx = (node.x ?? 0) + offset.dx;
+        other.fy = (node.y ?? 0) + offset.dy;
+      }
+    },
+    [graphData.links, graphData.nodes],
+  );
 
   const handleNodeRightClick = useCallback(
     (node: NebulaNode, event: MouseEvent) => {
@@ -593,7 +637,7 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
         onLinkClick={handleLinkClick as never}
         onBackgroundClick={handleBackgroundClick}
         onNodeHover={(n) => setHoverNodeId((n as NebulaNode | null)?.id ?? null)}
-        onNodeDrag={handleNodeDrag}
+        onNodeDrag={handleNodeDrag as never}
         onNodeDragEnd={handleNodeDragEnd as never}
         nodeCanvasObject={(node, ctx, globalScale) => {
           const n = node as NebulaNode;
