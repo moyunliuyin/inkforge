@@ -159,6 +159,7 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
   };
 
   const [pendingSrcId, setPendingSrcId] = useState<string | null>(null);
+  const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
   const [edgeForm, setEdgeForm] = useState<{
     src: { kind: WorldGraphEndpointKind; id: string; label: string };
     dst: { kind: WorldGraphEndpointKind; id: string; label: string };
@@ -226,6 +227,17 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
 
     return { nodes, links };
   }, [charactersQuery.data, worldsQuery.data, relationshipsQuery.data]);
+
+  // Tune force simulation: spread nodes apart so labels don't overlap
+  useEffect(() => {
+    const fg = fgRef.current;
+    if (!fg) return;
+    const linkForce = fg.d3Force("link") as { distance?: (n: number) => unknown } | undefined;
+    if (linkForce?.distance) linkForce.distance(120);
+    const chargeForce = fg.d3Force("charge") as { strength?: (n: number) => unknown } | undefined;
+    if (chargeForce?.strength) chargeForce.strength(-380);
+    fg.d3ReheatSimulation();
+  }, [baseGraphData]);
 
   const graphData = useMemo(() => {
     const timelineEvents = timelineQuery.data ?? [];
@@ -375,6 +387,14 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
 
   return (
     <div ref={containerRef} className="relative h-full w-full overflow-hidden bg-ink-900">
+      {baseGraphData.nodes.length === 0 && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+          <div className="pointer-events-auto rounded-lg border border-ink-700 bg-ink-800/80 px-6 py-4 text-center text-sm text-ink-300 backdrop-blur">
+            <div className="mb-1 text-base text-amber-300">🌌 星云空空如也</div>
+            <div className="text-xs">先到「人物」或「世界观条目」页建几条，或点击右上角 🤖 让 AI 从全书提取</div>
+          </div>
+        </div>
+      )}
       <ForceGraph2D
         ref={fgRef as never}
         graphData={graphData}
@@ -384,12 +404,20 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
         nodeRelSize={6}
         nodeLabel={(n) => (n as NebulaNode).label}
         nodeColor={(n) => (n as NebulaNode).color}
-        linkColor={() => "#64748b"}
+        linkColor={(l) =>
+          (l as NebulaLink).relId.startsWith("__synthetic_") ? "#fbbf2480" : "#64748b"
+        }
+        linkLineDash={(l) =>
+          (l as NebulaLink).relId.startsWith("__synthetic_") ? [4, 3] : null
+        }
         linkWidth={(l) => 1 + (l as NebulaLink).weight * 0.3}
         linkLabel={(l) => (l as NebulaLink).label ?? ""}
         linkDirectionalParticles={2}
         linkDirectionalParticleWidth={2}
         linkDirectionalParticleSpeed={0.004}
+        linkDirectionalParticleColor={(l) =>
+          (l as NebulaLink).relId.startsWith("__synthetic_") ? "#fbbf24" : "#94a3b8"
+        }
         cooldownTicks={120}
         d3AlphaDecay={0.02}
         d3VelocityDecay={0.3}
@@ -397,29 +425,52 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
         onNodeRightClick={handleNodeRightClick as never}
         onLinkClick={handleLinkClick as never}
         onBackgroundClick={handleBackgroundClick}
+        onNodeHover={(n) => setHoverNodeId((n as NebulaNode | null)?.id ?? null)}
         onNodeDragEnd={handleNodeDragEnd as never}
         nodeCanvasObject={(node, ctx, globalScale) => {
           const n = node as NebulaNode;
-          const r = n.size;
           const isPending = pendingSrcId === n.id;
+          const isHover = hoverNodeId === n.id;
+          const r = n.size + (isHover ? 2 : 0);
 
+          // Glow halo on hover or pending
+          if (isHover || isPending) {
+            ctx.beginPath();
+            ctx.arc(n.x ?? 0, n.y ?? 0, r + 6, 0, 2 * Math.PI);
+            ctx.fillStyle = isPending ? "#fbbf2433" : `${n.color}33`;
+            ctx.fill();
+          }
+
+          // Node fill
           ctx.beginPath();
-          ctx.arc(n.x ?? 0, n.y ?? 0, r, 0, 2 * Math.PI, false);
+          ctx.arc(n.x ?? 0, n.y ?? 0, r, 0, 2 * Math.PI);
           ctx.fillStyle = n.color;
           ctx.fill();
 
-          if (isPending) {
-            ctx.strokeStyle = "#fbbf24";
-            ctx.lineWidth = 2;
-            ctx.stroke();
+          // Stroke (border)
+          ctx.lineWidth = isPending ? 2.5 : isHover ? 1.5 : 1;
+          ctx.strokeStyle = isPending ? "#fbbf24" : "#1e293b";
+          ctx.stroke();
+
+          // Pinned indicator (small dot at corner if fx set)
+          const nn = n as unknown as { fx?: number; fy?: number };
+          if (nn.fx !== undefined && nn.fy !== undefined) {
+            ctx.beginPath();
+            ctx.arc((n.x ?? 0) + r * 0.7, (n.y ?? 0) - r * 0.7, 1.8, 0, 2 * Math.PI);
+            ctx.fillStyle = "#fbbf24";
+            ctx.fill();
           }
 
+          // Label with stroke for readability over any background
           const fontSize = Math.max(10, 12 / globalScale);
-          ctx.font = `${fontSize}px sans-serif`;
+          ctx.font = `${isHover ? "bold " : ""}${fontSize}px sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "top";
-          ctx.fillStyle = "#e2e8f0";
-          ctx.fillText(n.label, n.x ?? 0, (n.y ?? 0) + r + 2);
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = "rgba(11, 18, 32, 0.85)";
+          ctx.strokeText(n.label, n.x ?? 0, (n.y ?? 0) + r + 3);
+          ctx.fillStyle = isHover ? "#fde68a" : "#e2e8f0";
+          ctx.fillText(n.label, n.x ?? 0, (n.y ?? 0) + r + 3);
         }}
       />
 
