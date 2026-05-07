@@ -587,11 +587,12 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
           | undefined;
         if (linkForce?.strength) linkForce.strength(0);
       }
-      // P-controller follow: velocity proportional to position error,
-      // overwrites previous velocity each frame to avoid accumulation
-      // oscillation ("jittery"). d3 velocityDecay handles damping.
-      const P_GAIN = 0.2;
-      const MAX_VEL = 18;
+      // PD-style: blend 60% prior velocity (inertia) + 40% target velocity (P).
+      // Preserves spring-like delay & follow-through while preventing the
+      // unbounded accumulation that caused jitter.
+      const P_GAIN = 0.18;
+      const MAX_VEL = 14;
+      const SMOOTH = 0.4;
       for (const [otherId, offset] of state.offsets) {
         const other = graphData.nodes.find((n) => n.id === otherId) as
           | (NebulaNode & { vx?: number; vy?: number })
@@ -599,10 +600,10 @@ export function WorldNebulaGraph({ projectId }: WorldNebulaGraphProps): JSX.Elem
         if (!other || other.x == null || other.y == null) continue;
         const errX = (node.x ?? 0) + offset.dx - other.x;
         const errY = (node.y ?? 0) + offset.dy - other.y;
-        const vx = Math.max(-MAX_VEL, Math.min(MAX_VEL, errX * P_GAIN));
-        const vy = Math.max(-MAX_VEL, Math.min(MAX_VEL, errY * P_GAIN));
-        other.vx = vx;
-        other.vy = vy;
+        const targetVx = Math.max(-MAX_VEL, Math.min(MAX_VEL, errX * P_GAIN));
+        const targetVy = Math.max(-MAX_VEL, Math.min(MAX_VEL, errY * P_GAIN));
+        other.vx = (other.vx ?? 0) * (1 - SMOOTH) + targetVx * SMOOTH;
+        other.vy = (other.vy ?? 0) * (1 - SMOOTH) + targetVy * SMOOTH;
       }
     },
     [graphData.links, graphData.nodes],
