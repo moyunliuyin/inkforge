@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type {
   CharacterLetterRecord,
   CharacterLetterTone,
@@ -93,28 +94,17 @@ export function LetterInboxPage(): JSX.Element {
             ✨ 生成新信
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-2">
-          {letters.length === 0 ? (
-            <div className="p-6 text-center text-xs text-ink-500">
-              还没有信件。点上方「✨ 生成新信」让你笔下的人物给你写一封。
-            </div>
-          ) : (
-            letters.map((l) => (
-              <LetterRow
-                key={l.id}
-                letter={l}
-                characterName={characterMap.get(l.characterId)?.name ?? "未知角色"}
-                active={l.id === selectedId}
-                onClick={() => {
-                  setSelectedId(l.id);
-                  if (!l.read) markReadMut.mutate({ id: l.id, read: true });
-                }}
-                onPin={() => pinMut.mutate({ id: l.id, pinned: !l.pinned })}
-                onDismiss={() => dismissMut.mutate(l.id)}
-              />
-            ))
-          )}
-        </div>
+        <VirtualLetterList
+          letters={letters}
+          selectedId={selectedId}
+          characterMap={characterMap}
+          onSelect={(id, l) => {
+            setSelectedId(id);
+            if (!l.read) markReadMut.mutate({ id, read: true });
+          }}
+          onPin={(l) => pinMut.mutate({ id: l.id, pinned: !l.pinned })}
+          onDismiss={(l) => dismissMut.mutate(l.id)}
+        />
       </div>
 
       {/* 右侧：详情 */}
@@ -147,6 +137,80 @@ export function LetterInboxPage(): JSX.Element {
           }}
         />
       )}
+    </div>
+  );
+}
+
+function VirtualLetterList({
+  letters,
+  selectedId,
+  characterMap,
+  onSelect,
+  onPin,
+  onDismiss,
+}: {
+  letters: CharacterLetterRecord[];
+  selectedId: string | null;
+  characterMap: ReadonlyMap<string, { name: string }>;
+  onSelect: (id: string, letter: CharacterLetterRecord) => void;
+  onPin: (letter: CharacterLetterRecord) => void;
+  onDismiss: (letter: CharacterLetterRecord) => void;
+}): JSX.Element {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: letters.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 76,
+    overscan: 8,
+    getItemKey: (index) => letters[index]?.id ?? index,
+  });
+
+  if (letters.length === 0) {
+    return (
+      <div className="flex-1 overflow-y-auto p-2">
+        <div className="p-6 text-center text-xs text-ink-500">
+          还没有信件。点上方「✨ 生成新信」让你笔下的人物给你写一封。
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={scrollRef} className="flex-1 overflow-y-auto p-2">
+      <div
+        style={{
+          height: `${virtualizer.getTotalSize()}px`,
+          position: "relative",
+          width: "100%",
+        }}
+      >
+        {virtualizer.getVirtualItems().map((vRow) => {
+          const l = letters[vRow.index];
+          return (
+            <div
+              key={vRow.key}
+              data-index={vRow.index}
+              ref={virtualizer.measureElement}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                transform: `translateY(${vRow.start}px)`,
+              }}
+            >
+              <LetterRow
+                letter={l}
+                characterName={characterMap.get(l.characterId)?.name ?? "未知角色"}
+                active={l.id === selectedId}
+                onClick={() => onSelect(l.id, l)}
+                onPin={() => onPin(l)}
+                onDismiss={() => onDismiss(l)}
+              />
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

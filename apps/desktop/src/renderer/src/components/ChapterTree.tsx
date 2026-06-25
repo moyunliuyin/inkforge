@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ChapterRecord } from "@inkforge/shared";
 
 interface ChapterTreeProps {
@@ -80,6 +81,15 @@ export function ChapterTree({
   }, [renamingId]);
 
   const orderedIds = useMemo(() => flat.map((c) => c.id), [flat]);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // M9: 虚拟化章节列表，千章也只渲染可视行。行高近似固定，rename input 改高由 measureElement 兜底。
+  const virtualizer = useVirtualizer({
+    count: flat.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 32,
+    overscan: 12,
+    getItemKey: (index) => flat[index]?.id ?? index,
+  });
 
   const handleMove = (chapterId: string, direction: -1 | 1) => {
     const idx = orderedIds.indexOf(chapterId);
@@ -120,17 +130,40 @@ export function ChapterTree({
           </button>
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         {flat.length === 0 && (
           <p className="px-3 py-3 text-xs text-ink-400">还没有章节，点右上新建一章开始。</p>
         )}
-        <ul className="space-y-0.5 py-2">
-          {flat.map((chapter, idx) => {
+        <div
+          role="list"
+          style={{
+            height: `${virtualizer.getTotalSize()}px`,
+            position: "relative",
+            width: "100%",
+            paddingTop: 8,
+            paddingBottom: 8,
+          }}
+        >
+          {virtualizer.getVirtualItems().map((vRow) => {
+            const chapter = flat[vRow.index];
+            const idx = vRow.index;
             const active = chapter.id === currentChapterId;
             const depth = chapter.order;
             const isRenaming = chapter.id === renamingId;
             return (
-              <li key={chapter.id}>
+              <div
+                key={vRow.key}
+                role="listitem"
+                data-index={vRow.index}
+                ref={virtualizer.measureElement}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  transform: `translateY(${vRow.start}px)`,
+                }}
+              >
                 <div
                   className={`group flex items-center px-3 py-1.5 text-sm transition-colors ${
                     active ? "bg-amber-500/20 text-amber-200" : "text-ink-200 hover:bg-ink-700/60"
@@ -187,10 +220,10 @@ export function ChapterTree({
                     </div>
                   )}
                 </div>
-              </li>
+              </div>
             );
           })}
-        </ul>
+        </div>
       </div>
 
       {menu && (

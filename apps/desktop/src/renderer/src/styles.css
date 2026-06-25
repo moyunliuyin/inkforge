@@ -116,3 +116,12 @@ button:disabled {
   90%  { opacity: 0.6; }
   100% { transform: translate(-6px, -68px) rotate(360deg); opacity: 0; }
 }
+
+/* ===== M9 · 路由懒加载骨架 ===== */
+@keyframes skeleton-shimmer {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 0.85; }
+}
+.skeleton-shimmer {
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}

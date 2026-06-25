@@ -1,27 +1,34 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { dailyApi, providerApi, projectApi, settingsApi } from "./lib/api";
 import { useAppStore } from "./stores/app-store";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { WorkspacePage } from "./pages/WorkspacePage";
-import { SkillPage } from "./pages/SkillPage";
-import { CharacterPage } from "./pages/CharacterPage";
-import { TavernPage } from "./pages/TavernPage";
-import { WorldPage } from "./pages/WorldPage";
-import { OutlinePage } from "./pages/OutlinePage";
-import { ResearchPage } from "./pages/ResearchPage";
-import { ReviewPage } from "./pages/ReviewPage";
 import { ActivityBar } from "./components/ActivityBar";
-import { AchievementHallPage } from "./pages/AchievementHallPage";
-import { LetterInboxPage } from "./pages/LetterInboxPage";
 import { AchievementToast } from "./components/achievement";
-import { BookshelfPage } from "./components/bookshelf";
 import { Companion } from "./components/companion";
 import { ReminderToast } from "./components/log";
 import { TitleBar } from "./components/titlebar";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { CrashRecoveryBanner } from "./components/CrashRecoveryBanner";
 import { SettingsDrawer } from "./components/settings";
+import { PageSkeleton } from "./components/PageSkeleton";
+
+// M9: 路由级代码分割 — 首屏/热路径页面 eager，其余懒加载（命名导出需映射 default）。
+const SkillPage = lazy(() => import("./pages/SkillPage").then((m) => ({ default: m.SkillPage })));
+const CharacterPage = lazy(() => import("./pages/CharacterPage").then((m) => ({ default: m.CharacterPage })));
+const TavernPage = lazy(() => import("./pages/TavernPage").then((m) => ({ default: m.TavernPage })));
+const WorldPage = lazy(() => import("./pages/WorldPage").then((m) => ({ default: m.WorldPage })));
+const OutlinePage = lazy(() => import("./pages/OutlinePage").then((m) => ({ default: m.OutlinePage })));
+const ResearchPage = lazy(() => import("./pages/ResearchPage").then((m) => ({ default: m.ResearchPage })));
+const ReviewPage = lazy(() => import("./pages/ReviewPage").then((m) => ({ default: m.ReviewPage })));
+const AchievementHallPage = lazy(() =>
+  import("./pages/AchievementHallPage").then((m) => ({ default: m.AchievementHallPage })),
+);
+const LetterInboxPage = lazy(() =>
+  import("./pages/LetterInboxPage").then((m) => ({ default: m.LetterInboxPage })),
+);
+const BookshelfPage = lazy(() => import("./components/bookshelf").then((m) => ({ default: m.BookshelfPage })));
 
 export function App(): JSX.Element {
   const setSettings = useAppStore((s) => s.setSettings);
@@ -134,17 +141,19 @@ export function App(): JSX.Element {
           </ErrorBoundary>
           <div className="flex min-w-0 flex-1 flex-col">
             <ErrorBoundary label={mainView} lang={lang}>
-              {mainView === "writing" && <WorkspacePage />}
-              {mainView === "skill" && <SkillPage />}
-              {mainView === "character" && <CharacterPage />}
-              {mainView === "tavern" && <TavernPage />}
-              {mainView === "world" && <WorldPage />}
-              {mainView === "research" && <ResearchPage />}
-              {mainView === "review" && <ReviewPage />}
-              {mainView === "bookshelf" && <BookshelfPage />}
-              {mainView === "achievement" && <AchievementHallPage />}
-              {mainView === "letters" && <LetterInboxPage />}
-              {mainView === "outline" && <OutlinePage />}
+              <Suspense fallback={<PageSkeleton label={mainView} />}>
+                {mainView === "writing" && <WorkspacePage />}
+                {mainView === "skill" && <SkillPage />}
+                {mainView === "character" && <CharacterPage />}
+                {mainView === "tavern" && <TavernPage />}
+                {mainView === "world" && <WorldPage />}
+                {mainView === "research" && <ResearchPage />}
+                {mainView === "review" && <ReviewPage />}
+                {mainView === "bookshelf" && <BookshelfPage />}
+                {mainView === "achievement" && <AchievementHallPage />}
+                {mainView === "letters" && <LetterInboxPage />}
+                {mainView === "outline" && <OutlinePage />}
+              </Suspense>
             </ErrorBoundary>
           </div>
         </div>

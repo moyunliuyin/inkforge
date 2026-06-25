@@ -21,6 +21,7 @@ if (process.platform === "win32") {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let deferredInitHandle: NodeJS.Immediate | null = null;
 
 function getWindow(): BrowserWindow | null {
   return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
@@ -31,14 +32,24 @@ async function bootstrap(): Promise<void> {
     initLogger();
     const ctx = getAppContext();
     initCrashMarker(ctx.userDataDir);
-    initVacuumScheduler(ctx.db, ctx.workspaceDir);
     wireCrashReasonCapture();
     buildAppMenu();
     registerIpcHandlers(getWindow);
+    // M9: open the window immediately, defer non-critical init (vacuum scheduler,
+    // skill triggers, preset seeding) to setImmediate so the renderer paints first.
     mainWindow = createMainWindow();
-    initializeSkillTriggerService(getWindow);
-    seedBuiltinPresets();
-    logger.info("InkForge main process ready");
+    deferredInitHandle = setImmediate(() => {
+      deferredInitHandle = null;
+      try {
+        initVacuumScheduler(ctx.db, ctx.workspaceDir);
+        initializeSkillTriggerService(getWindow);
+        seedBuiltinPresets();
+        logger.info("InkForge deferred init complete");
+      } catch (err) {
+        logger.error("Deferred init failed", err);
+      }
+    });
+    logger.info("InkForge main process ready (window shown)");
   } catch (error) {
     logger.error("Failed to bootstrap main process", error);
     throw error;
@@ -72,6 +83,10 @@ app.on("activate", () => {
 });
 
 app.on("before-quit", () => {
+  if (deferredInitHandle) {
+    clearImmediate(deferredInitHandle);
+    deferredInitHandle = null;
+  }
   disposeSkillTriggerService();
   disposeTerminals();
   disposeVacuumScheduler();
