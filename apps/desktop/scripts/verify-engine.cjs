@@ -9,6 +9,7 @@
 const {
   BudgetTracker,
   ContextBuilder,
+  RoundOrchestrator,
   estimateTokensFromText,
 } = require("@inkforge/tavern-engine");
 
@@ -143,6 +144,20 @@ function testContextBuilder() {
   );
   assert(!!directorInjected, "director 模式将 directorMessage 注入末尾 user 段");
 
+  const autoDirector = builder.build({
+    speakerCard: speaker,
+    allCards: [speaker, other],
+    topic: "师门任务",
+    mode: "auto",
+    history,
+    lastK: 6,
+    directorMessage: "推动冲突升级",
+  });
+  assert(
+    autoDirector.messages.some((m) => m.role === "user" && m.content.startsWith("[导演]")),
+    "auto 模式同样注入 directorMessage（Issue 3）",
+  );
+
   const truncated = builder.build({
     speakerCard: speaker,
     allCards: [speaker, other],
@@ -172,13 +187,111 @@ function testContextBuilder() {
   );
 }
 
-function main() {
+function makeCard(id, name) {
+  return {
+    id,
+    name,
+    persona: "",
+    avatarPath: null,
+    providerId: "p",
+    model: "m",
+    temperature: 0.7,
+    maxTokens: null,
+    linkedNovelCharacterId: null,
+    syncMode: "two-way",
+    createdAt: "",
+    updatedAt: "",
+  };
+}
+
+async function testRoundOrchestrator() {
+  const participants = [makeCard("a", "甲"), makeCard("b", "乙")];
+  const idleBudget = {
+    sessionId: "s1",
+    budgetTokens: 1000,
+    usedTokens: 0,
+    remainingTokens: 1000,
+    shouldWarn: false,
+    warnAt: null,
+  };
+
+  const buildCalls = [];
+  const turnDones = [];
+  let roundDones = 0;
+  let compactCalls = 0;
+  let appendN = 0;
+
+  const orch = new RoundOrchestrator({
+    loadHistory: async () => [],
+    appendMessage: async (input) => {
+      appendN += 1;
+      return { id: `m${appendN}`, ...input };
+    },
+    buildContext: (i) => {
+      buildCalls.push(i.directorMessage);
+      return { systemPrompt: "sys", messages: [{ role: "user", content: "hi" }] };
+    },
+    resolveSpeakerRuntime: async (c) => ({ providerId: c.providerId, model: c.model }),
+    streamCompletion: async function* () {
+      yield { type: "delta", textDelta: "台词" };
+      yield { type: "done", usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } };
+    },
+    estimateTokens: () => 100,
+    recordUsage: () => idleBudget,
+    shouldCompactBeforeNextRound: () => true, // force the compaction path on every inter-round gap
+    getBudgetState: () => idleBudget,
+    compactBeforeNextRound: async () => {
+      compactCalls += 1;
+      return { status: "compacted", budgetState: idleBudget };
+    },
+    onChunk: () => {},
+    onTurnDone: (e) =>
+      turnDones.push({ roundIndex: e.roundIndex, turnIndex: e.turnIndex, status: e.status }),
+    onRoundDone: (e) => {
+      if (e.status === "completed") roundDones += 1;
+    },
+  });
+
+  await orch.run({
+    roundId: "r1",
+    sessionId: "s1",
+    mode: "auto",
+    participants,
+    lastK: 6,
+    topic: "题",
+    autoRounds: 3,
+    directorMessage: "推动剧情",
+  });
+
+  assert(turnDones.length === 6, `auto 3 轮 × 2 角色 → 6 个 turn done（实际 ${turnDones.length}）`);
+  assert(roundDones === 1, `completed 时恰好发 1 个 round done（实际 ${roundDones}）`);
+  assert(
+    turnDones[0].roundIndex === 0 && turnDones[0].turnIndex === 0,
+    "首个 turn done 索引为 (0,0)",
+  );
+  assert(
+    turnDones[5].roundIndex === 2 && turnDones[5].turnIndex === 1,
+    "末个 turn done 索引为 (2,1)",
+  );
+  assert(
+    buildCalls.length > 0 && buildCalls.every((d) => d === "推动剧情"),
+    "导演指令在每回合每角色注入（Issue 3，跨轮持续）",
+  );
+  assert(
+    compactCalls === 1,
+    `auto 压缩封顶 maxAutoCompactionsPerRun=1（2 个轮间隙仅压 1 次，实际 ${compactCalls}）`,
+  );
+}
+
+async function main() {
   console.log("\n[verify-engine] BudgetTracker estimate");
   testEstimate();
   console.log("\n[verify-engine] BudgetTracker record/warn/compact");
   testBudget();
   console.log("\n[verify-engine] ContextBuilder build");
   testContextBuilder();
+  console.log("\n[verify-engine] RoundOrchestrator run (auto + compaction DI)");
+  await testRoundOrchestrator();
 
   if (failed > 0) {
     console.error(`\n\x1b[31m${failed} 项断言失败\x1b[0m`);
@@ -187,4 +300,7 @@ function main() {
   console.log("\n\x1b[32mtavern-engine 纯逻辑验证通过\x1b[0m");
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

@@ -9,6 +9,7 @@ type TavernCardRow = {
   provider_id: string;
   model: string;
   temperature: number;
+  max_tokens: number | null;
   linked_novel_character_id: string | null;
   sync_mode: string;
   created_at: string;
@@ -20,6 +21,12 @@ function normalizeSyncMode(value: string): SyncMode {
   return "two-way";
 }
 
+function normalizeMaxTokens(value: number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const n = Math.floor(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function rowToRecord(row: TavernCardRow): TavernCardRecord {
   return {
     id: row.id,
@@ -29,6 +36,7 @@ function rowToRecord(row: TavernCardRow): TavernCardRecord {
     providerId: row.provider_id,
     model: row.model,
     temperature: row.temperature,
+    maxTokens: row.max_tokens,
     linkedNovelCharacterId: row.linked_novel_character_id,
     syncMode: normalizeSyncMode(row.sync_mode),
     createdAt: row.created_at,
@@ -44,6 +52,7 @@ export interface CreateTavernCardRow {
   providerId: string;
   model: string;
   temperature?: number;
+  maxTokens?: number | null;
   linkedNovelCharacterId?: string | null;
   syncMode?: SyncMode;
 }
@@ -58,6 +67,7 @@ export function insertTavernCard(db: DB, input: CreateTavernCardRow): TavernCard
     provider_id: input.providerId,
     model: input.model,
     temperature: input.temperature ?? 0.7,
+    max_tokens: normalizeMaxTokens(input.maxTokens),
     linked_novel_character_id: input.linkedNovelCharacterId ?? null,
     sync_mode: input.syncMode ?? "two-way",
     created_at: now,
@@ -65,9 +75,9 @@ export function insertTavernCard(db: DB, input: CreateTavernCardRow): TavernCard
   };
   db.prepare(
     `INSERT INTO tavern_cards
-       (id, name, persona, avatar_path, provider_id, model, temperature,
+       (id, name, persona, avatar_path, provider_id, model, temperature, max_tokens,
         linked_novel_character_id, sync_mode, created_at, updated_at)
-     VALUES (@id, @name, @persona, @avatar_path, @provider_id, @model, @temperature,
+     VALUES (@id, @name, @persona, @avatar_path, @provider_id, @model, @temperature, @max_tokens,
              @linked_novel_character_id, @sync_mode, @created_at, @updated_at)`,
   ).run(row);
   return rowToRecord(row);
@@ -81,6 +91,7 @@ export interface UpdateTavernCardRow {
   providerId?: string;
   model?: string;
   temperature?: number;
+  maxTokens?: number | null;
   linkedNovelCharacterId?: string | null;
   syncMode?: SyncMode;
 }
@@ -98,6 +109,7 @@ export function updateTavernCard(db: DB, input: UpdateTavernCardRow): TavernCard
     provider_id: input.providerId ?? existing.provider_id,
     model: input.model ?? existing.model,
     temperature: input.temperature ?? existing.temperature,
+    max_tokens: input.maxTokens === undefined ? existing.max_tokens : normalizeMaxTokens(input.maxTokens),
     linked_novel_character_id:
       input.linkedNovelCharacterId === undefined
         ? existing.linked_novel_character_id
@@ -109,6 +121,7 @@ export function updateTavernCard(db: DB, input: UpdateTavernCardRow): TavernCard
     `UPDATE tavern_cards SET
        name = @name, persona = @persona, avatar_path = @avatar_path,
        provider_id = @provider_id, model = @model, temperature = @temperature,
+       max_tokens = @max_tokens,
        linked_novel_character_id = @linked_novel_character_id,
        sync_mode = @sync_mode, updated_at = @updated_at
      WHERE id = @id`,

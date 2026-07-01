@@ -116,6 +116,18 @@ export interface RoundOrchestratorDeps {
     estimatedInputTokens: number,
   ) => TokenBudgetState;
   shouldCompactBeforeNextRound: (estimatedNextInputTokens: number) => boolean;
+  getBudgetState?: () => TokenBudgetState;
+  compactBeforeNextRound?: (input: {
+    roundId: string;
+    sessionId: string;
+    completedRoundIndex: number;
+    nextRoundIndex: number;
+    estimatedNextRoundTokens: number;
+  }) => Promise<{
+    status: "compacted" | "skipped" | "failed";
+    budgetState: TokenBudgetState;
+    error?: string;
+  }>;
   onStart?: (event: OrchestratorStartContext) => void;
   onChunk: (event: OrchestratorChunkEvent) => void;
   onTurnDone: (event: OrchestratorTurnDoneEvent) => void;
@@ -137,6 +149,8 @@ export interface RoundOrchestratorInput {
 export class RoundOrchestrator {
   private readonly deps: RoundOrchestratorDeps;
   private readonly cancelled = new Set<string>();
+  private autoCompactions = 0;
+  private readonly maxAutoCompactionsPerRun = 1;
 
   constructor(deps: RoundOrchestratorDeps) {
     this.deps = deps;
@@ -151,6 +165,7 @@ export class RoundOrchestrator {
     if (participants.length === 0) {
       throw new TavernRuntimeError("no_participants", "participants is empty");
     }
+    this.autoCompactions = 0;
     const totalRounds = Math.max(1, input.autoRounds ?? 1);
     this.deps.onStart?.({
       roundId,
@@ -175,7 +190,7 @@ export class RoundOrchestrator {
             mode,
             history,
             lastK,
-            directorMessage: roundIndex === 0 && turnIndex === 0 ? input.directorMessage : undefined,
+            directorMessage: input.directorMessage,
           });
           const estimatedInput = this.deps.estimateTokens({ systemPrompt, messages });
           const runtime = await this.deps.resolveSpeakerRuntime(speaker);
@@ -205,15 +220,8 @@ export class RoundOrchestrator {
           }
         }
         if (this.cancelled.has(roundId)) break;
-        const nextEstimate = Math.max(200, Math.round((totalRounds - roundIndex - 1) > 0 ? 1200 : 0));
-        if (nextEstimate > 0 && this.deps.shouldCompactBeforeNextRound(nextEstimate)) {
-          this.deps.onBudgetWarning?.({
-            roundId,
-            sessionId,
-            budgetState: this.deps.recordUsage(undefined, 0),
-            estimatedNextRoundTokens: nextEstimate,
-            threshold: 0,
-          });
+        if (roundIndex < totalRounds - 1) {
+          await this.maybeCompactBeforeNextRound(input, roundIndex);
         }
       }
       this.deps.onRoundDone({
@@ -336,5 +344,88 @@ export class RoundOrchestrator {
       this.deps.onTurnDone(event);
       return event;
     }
+  }
+
+  private currentBudgetState(): TokenBudgetState {
+    return this.deps.getBudgetState
+      ? this.deps.getBudgetState()
+      : this.deps.recordUsage(undefined, 0);
+  }
+
+  private async estimateNextRoundInputTokens(input: RoundOrchestratorInput): Promise<number> {
+    const history = await this.deps.loadHistory(input.sessionId);
+    let total = 0;
+    for (const speaker of input.participants) {
+      const { systemPrompt, messages } = this.deps.buildContext({
+        speakerCard: speaker,
+        allCards: input.participants,
+        topic: input.topic,
+        mode: input.mode,
+        history,
+        lastK: input.lastK,
+        directorMessage: input.directorMessage,
+      });
+      total += this.deps.estimateTokens({ systemPrompt, messages });
+    }
+    return total;
+  }
+
+  /**
+   * Between rounds: if the projected next-round input would blow the budget,
+   * trigger one compaction (capped) via the injected hook, then warn only if
+   * still tight. Never loops — the cap guarantees forward progress.
+   */
+  private async maybeCompactBeforeNextRound(
+    input: RoundOrchestratorInput,
+    completedRoundIndex: number,
+  ): Promise<void> {
+    const { roundId, sessionId } = input;
+    const estimatedNext = await this.estimateNextRoundInputTokens(input);
+    if (!this.deps.shouldCompactBeforeNextRound(estimatedNext)) return;
+
+    if (this.deps.compactBeforeNextRound && this.autoCompactions < this.maxAutoCompactionsPerRun) {
+      this.autoCompactions += 1;
+      // Hard timeout: a hung summary stream must never block the round loop
+      // (which would also wedge stop() since cancellation is checked between rounds).
+      const COMPACT_TIMEOUT_MS = 60_000;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const result = await Promise.race([
+        this.deps.compactBeforeNextRound({
+          roundId,
+          sessionId,
+          completedRoundIndex,
+          nextRoundIndex: completedRoundIndex + 1,
+          estimatedNextRoundTokens: estimatedNext,
+        }),
+        new Promise<{ status: "skipped"; budgetState: TokenBudgetState }>((resolve) => {
+          timer = setTimeout(
+            () => resolve({ status: "skipped", budgetState: this.currentBudgetState() }),
+            COMPACT_TIMEOUT_MS,
+          );
+        }),
+      ]).finally(() => clearTimeout(timer));
+      const afterEstimate =
+        result.status === "compacted"
+          ? await this.estimateNextRoundInputTokens(input)
+          : estimatedNext;
+      if (result.status !== "compacted" || this.deps.shouldCompactBeforeNextRound(afterEstimate)) {
+        this.deps.onBudgetWarning?.({
+          roundId,
+          sessionId,
+          budgetState: result.budgetState,
+          estimatedNextRoundTokens: afterEstimate,
+          threshold: 0,
+        });
+      }
+      return;
+    }
+
+    this.deps.onBudgetWarning?.({
+      roundId,
+      sessionId,
+      budgetState: this.currentBudgetState(),
+      estimatedNextRoundTokens: estimatedNext,
+      threshold: 0,
+    });
   }
 }

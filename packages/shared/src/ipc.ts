@@ -801,6 +801,7 @@ export interface TavernCardCreateInput {
   providerId: string;
   model: string;
   temperature?: number;
+  maxTokens?: number | null;
   linkedNovelCharacterId?: string | null;
   syncMode?: TavernCardRecord["syncMode"];
 }
@@ -813,6 +814,7 @@ export interface TavernCardUpdateInput {
   providerId?: string;
   model?: string;
   temperature?: number;
+  maxTokens?: number | null;
   linkedNovelCharacterId?: string | null;
   syncMode?: TavernCardRecord["syncMode"];
 }
@@ -968,6 +970,8 @@ export interface TavernSummaryCompactInput {
 export interface TavernChunkEvent {
   roundId: string;
   sessionId: string;
+  roundIndex: number;
+  turnIndex: number;
   speakerCardId: string;
   speakerName: string;
   delta: string;
@@ -978,8 +982,12 @@ export interface TavernChunkEvent {
 }
 
 export interface TavernDoneEvent {
+  /** "turn" fires after each speaker; "round" fires once when the whole run settles. */
+  kind: "turn" | "round";
   roundId: string;
   sessionId: string;
+  roundIndex?: number;
+  turnIndex?: number;
   speakerCardId: string;
   messageId?: string;
   status: "completed" | "failed" | "stopped";

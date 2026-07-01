@@ -295,6 +295,8 @@ export interface TavernCardRecord {
   providerId: string;
   model: string;
   temperature: number;
+  /** Per-card output token cap. null → use provider default. */
+  maxTokens: number | null;
   linkedNovelCharacterId: string | null;
   syncMode: SyncMode;
   createdAt: string;

@@ -837,6 +837,25 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    // ===================================================================
+    // v21 · Tavern card per-card maxTokens
+    //
+    // Per-card output token cap for tavern roleplay. Nullable → existing
+    // cards fall back to the provider default (zero behavior change).
+    // ===================================================================
+    version: 21,
+    name: "tavern_card_max_tokens",
+    up: (db) => {
+      const cols = db
+        .prepare(`PRAGMA table_info(tavern_cards)`)
+        .all()
+        .map((row) => (row as { name: string }).name);
+      if (!cols.includes("max_tokens")) {
+        db.exec(`ALTER TABLE tavern_cards ADD COLUMN max_tokens INTEGER`);
+      }
+    },
+  },
 ];
 
 export function runMigrations(db: DB): number {

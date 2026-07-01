@@ -119,7 +119,7 @@ export class ContextBuilder {
       }
     }
 
-    if (mode === "director" && directorMessage && directorMessage.trim().length > 0) {
+    if (directorMessage && directorMessage.trim().length > 0) {
       messages.push({
         role: "user",
         content: `[导演]：${directorMessage.trim()}`,

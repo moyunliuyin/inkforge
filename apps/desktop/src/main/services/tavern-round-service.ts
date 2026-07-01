@@ -7,7 +7,6 @@ import {
   type LLMMessage,
   type OrchestratorStreamChunk,
   type OrchestratorStreamInput,
-  estimateTokensFromText,
 } from "@inkforge/tavern-engine";
 import {
   getTavernCardById,
@@ -38,6 +37,7 @@ import {
   streamText,
 } from "./llm-runtime";
 import { resolveSceneBinding } from "./scene-binding-service";
+import { compactTavernHistory } from "./tavern-summary-service";
 
 const CHUNK_CHANNEL: typeof ipcEventChannels.tavernChunk = "tavern:chunk";
 const DONE_CHANNEL: typeof ipcEventChannels.tavernDone = "tavern:done";
@@ -59,7 +59,12 @@ function emit<T>(
   payload: T,
 ): void {
   if (!window || window.isDestroyed()) return;
-  window.webContents.send(channel, payload);
+  try {
+    window.webContents.send(channel, payload);
+  } catch {
+    // Never let a dead/destroyed webContents bubble up — callers rely on
+    // post-emit cleanup (activeRounds.delete) running unconditionally.
+  }
 }
 
 function toLLMCoreMessages(messages: LLMMessage[]): LLMCoreMessage[] {
@@ -91,6 +96,11 @@ export async function startTavernRound(
   if (!session) throw new Error(`Tavern session not found: ${input.sessionId}`);
   if (!input.participants || input.participants.length === 0) {
     throw new Error("participants must be non-empty");
+  }
+  for (const active of activeRounds.values()) {
+    if (active.sessionId === input.sessionId) {
+      throw new Error(`tavern_round_already_running:${active.roundId}`);
+    }
   }
   const participants = resolveParticipantCards(input.participants);
   const mode = input.mode ?? session.mode;
@@ -142,6 +152,7 @@ export async function startTavernRound(
       providerId: card.providerId,
       model: card.model,
       temperature: card.temperature,
+      maxTokens: card.maxTokens ?? undefined,
     }),
     streamCompletion: (runInput) =>
       streamCharacterCompletion(runInput),
@@ -154,10 +165,42 @@ export async function startTavernRound(
       budgetTracker.recordUsage(usage, estimatedInputTokens),
     shouldCompactBeforeNextRound: (estimatedNextInput) =>
       budgetTracker.shouldCompactBeforeNextRound(estimatedNextInput),
+    getBudgetState: () => budgetTracker.getState(),
+    compactBeforeNextRound: async () => {
+      try {
+        await compactTavernHistory({ sessionId: session.id, keepLastK: session.lastK });
+        const used = sumTavernMessageTokens(ctx.db, session.id);
+        budgetTracker.seed(used.tokensIn + used.tokensOut);
+        state.warnEmitted = false;
+        // History changed mid-run → nudge the renderer to refresh the transcript
+        // and budget readout (carries post-compaction state).
+        const compactedState = budgetTracker.getState();
+        emit(window, BUDGET_WARN_CHANNEL, {
+          sessionId: session.id,
+          remainingTokens: compactedState.remainingTokens,
+          estimatedNextRoundTokens: 0,
+          threshold: budgetTracker.warnThreshold,
+          emittedAt: new Date().toISOString(),
+          state: compactedState,
+        });
+        return { status: "compacted", budgetState: compactedState };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const skipped = message.includes("summary_provider_not_configured");
+        logger.warn("tavern auto-compaction skipped/failed", error);
+        return {
+          status: skipped ? "skipped" : "failed",
+          budgetState: budgetTracker.getState(),
+          error: message,
+        };
+      }
+    },
     onChunk: (event) => {
       const chunkEvent: TavernChunkEvent = {
         roundId: event.roundId,
         sessionId: event.sessionId,
+        roundIndex: event.roundIndex,
+        turnIndex: event.turnIndex,
         speakerCardId: event.speaker.id,
         speakerName: event.speaker.name,
         delta: event.delta,
@@ -170,8 +213,11 @@ export async function startTavernRound(
     },
     onTurnDone: (event) => {
       const doneEvent: TavernDoneEvent = {
+        kind: "turn",
         roundId: event.roundId,
         sessionId: event.sessionId,
+        roundIndex: event.roundIndex,
+        turnIndex: event.turnIndex,
         speakerCardId: event.speaker.id,
         messageId: event.message?.id,
         status: event.status,
@@ -183,17 +229,16 @@ export async function startTavernRound(
       maybeEmitBudgetWarning(window, state, event.budgetState);
     },
     onRoundDone: (event) => {
-      if (event.status === "failed" || event.status === "stopped") {
-        const stateDone: TavernDoneEvent = {
-          roundId: event.roundId,
-          sessionId: event.sessionId,
-          speakerCardId: "",
-          status: event.status,
-          error: event.error,
-          finishedAt: new Date().toISOString(),
-        };
-        emit(window, DONE_CHANNEL, stateDone);
-      }
+      const roundDone: TavernDoneEvent = {
+        kind: "round",
+        roundId: event.roundId,
+        sessionId: event.sessionId,
+        speakerCardId: "",
+        status: event.status,
+        error: event.error,
+        finishedAt: new Date().toISOString(),
+      };
+      emit(window, DONE_CHANNEL, roundDone);
       activeRounds.delete(event.roundId);
     },
     onBudgetWarning: (event) => {
@@ -219,6 +264,7 @@ export async function startTavernRound(
     .catch((error) => {
       logger.warn("tavern round failed unexpectedly", error);
       const doneEvent: TavernDoneEvent = {
+        kind: "round",
         roundId,
         sessionId: session.id,
         speakerCardId: "",
@@ -295,9 +341,7 @@ function maybeEmitBudgetWarning(
   if (!budgetState.shouldWarn) return;
   if (state.warnEmitted) return;
   state.warnEmitted = true;
-  const estimatedNext = overrides?.estimatedNextRoundTokens ?? estimateTokensFromText(
-    "占位：下一轮预期输入（engine 侧无历史时的保守估算）",
-  );
+  const estimatedNext = overrides?.estimatedNextRoundTokens ?? 0;
   const event: TavernBudgetWarningEvent = {
     sessionId: state.sessionId,
     remainingTokens: budgetState.remainingTokens,

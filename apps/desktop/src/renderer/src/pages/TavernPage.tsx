@@ -33,11 +33,16 @@ export function TavernPage(): JSX.Element {
       });
     });
     const offDone = tavernEventsApi.onDone((e) => {
+      // Round-level done is lifecycle-only (handled in DirectorPanel); the
+      // per-turn done is what flushes the streaming buffer into a saved message.
+      if (e.kind === "round") return;
       // clear buffer & refresh messages
       updateTavernStreamBuffer(e.sessionId, null);
       queryClient.invalidateQueries({ queryKey: ["tavernMessages", e.sessionId] });
     });
     const offBudget = tavernEventsApi.onBudgetWarning((e) => {
+      // A budget event also rides along after auto-compaction replaces history.
+      queryClient.invalidateQueries({ queryKey: ["tavernMessages", e.sessionId] });
       if (e.state) {
         setTavernBudgetState(e.sessionId, e.state);
       } else {

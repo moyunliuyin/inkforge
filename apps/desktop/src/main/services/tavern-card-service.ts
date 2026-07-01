@@ -26,6 +26,7 @@ export function createTavernCard(input: TavernCardCreateInput): TavernCardRecord
     providerId: input.providerId,
     model: input.model,
     temperature: input.temperature,
+    maxTokens: input.maxTokens ?? null,
     linkedNovelCharacterId: input.linkedNovelCharacterId ?? null,
     syncMode: input.syncMode ?? "two-way",
   });
