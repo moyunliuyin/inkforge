@@ -283,6 +283,113 @@ async function testRoundOrchestrator() {
   );
 }
 
+async function testStreamIdleTimeout() {
+  const participants = [makeCard("a", "甲")];
+  const idleBudget = {
+    sessionId: "s1",
+    budgetTokens: 1000,
+    usedTokens: 0,
+    remainingTokens: 1000,
+    shouldWarn: false,
+    warnAt: null,
+  };
+  let turnStatus = null;
+  let roundStatus = null;
+
+  const orch = new RoundOrchestrator({
+    loadHistory: async () => [],
+    appendMessage: async (input) => ({ id: "m1", ...input }),
+    buildContext: () => ({ systemPrompt: "sys", messages: [{ role: "user", content: "hi" }] }),
+    resolveSpeakerRuntime: async (c) => ({ providerId: c.providerId, model: c.model }),
+    // A stream that never yields and never returns → would hang forever w/o the watchdog.
+    streamCompletion: async function* () {
+      await new Promise(() => {});
+    },
+    estimateTokens: () => 100,
+    recordUsage: () => idleBudget,
+    shouldCompactBeforeNextRound: () => false,
+    getBudgetState: () => idleBudget,
+    streamPollMs: 10,
+    streamIdleTimeoutMs: 60,
+    onChunk: () => {},
+    onTurnDone: (e) => {
+      turnStatus = e.status;
+    },
+    onRoundDone: (e) => {
+      roundStatus = e.status;
+    },
+  });
+
+  await orch.run({
+    roundId: "rIdle",
+    sessionId: "s1",
+    mode: "director",
+    participants,
+    lastK: 6,
+    topic: "题",
+    autoRounds: 1,
+  });
+
+  assert(turnStatus === "failed", `挂死流经空闲超时判 turn 失败（实际 ${turnStatus}）`);
+  assert(
+    roundStatus === "failed",
+    `挂死流 → round done(failed) 触发、run() 不永久阻塞（实际 ${roundStatus}）`,
+  );
+}
+
+async function testStreamStopDuringHang() {
+  const participants = [makeCard("a", "甲")];
+  const idleBudget = {
+    sessionId: "s1",
+    budgetTokens: 1000,
+    usedTokens: 0,
+    remainingTokens: 1000,
+    shouldWarn: false,
+    warnAt: null,
+  };
+  let turnStatus = null;
+  let roundStatus = null;
+
+  const orch = new RoundOrchestrator({
+    loadHistory: async () => [],
+    appendMessage: async (input) => ({ id: "m1", ...input }),
+    buildContext: () => ({ systemPrompt: "sys", messages: [{ role: "user", content: "hi" }] }),
+    resolveSpeakerRuntime: async (c) => ({ providerId: c.providerId, model: c.model }),
+    streamCompletion: async function* () {
+      await new Promise(() => {});
+    },
+    estimateTokens: () => 100,
+    recordUsage: () => idleBudget,
+    shouldCompactBeforeNextRound: () => false,
+    getBudgetState: () => idleBudget,
+    streamPollMs: 10,
+    streamIdleTimeoutMs: 100000, // idle timeout won't fire; stop() must be what ends it
+    onChunk: () => {},
+    onTurnDone: (e) => {
+      turnStatus = e.status;
+    },
+    onRoundDone: (e) => {
+      roundStatus = e.status;
+    },
+  });
+
+  const runP = orch.run({
+    roundId: "rStop",
+    sessionId: "s1",
+    mode: "director",
+    participants,
+    lastK: 6,
+    topic: "题",
+    autoRounds: 1,
+  });
+  await new Promise((r) => setTimeout(r, 40));
+  orch.stop("rStop");
+  await runP;
+
+  assert(turnStatus === "stopped", `stop() 能中断挂死流（turn 实际 ${turnStatus}）`);
+  assert(roundStatus === "stopped", `stop 后 round done(stopped) 触发（实际 ${roundStatus}）`);
+}
+
 async function main() {
   console.log("\n[verify-engine] BudgetTracker estimate");
   testEstimate();
@@ -292,6 +399,9 @@ async function main() {
   testContextBuilder();
   console.log("\n[verify-engine] RoundOrchestrator run (auto + compaction DI)");
   await testRoundOrchestrator();
+  console.log("\n[verify-engine] RoundOrchestrator stream watchdog");
+  await testStreamIdleTimeout();
+  await testStreamStopDuringHang();
 
   if (failed > 0) {
     console.error(`\n\x1b[31m${failed} 项断言失败\x1b[0m`);

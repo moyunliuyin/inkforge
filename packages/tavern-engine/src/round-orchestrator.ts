@@ -116,6 +116,9 @@ export interface RoundOrchestratorDeps {
     estimatedInputTokens: number,
   ) => TokenBudgetState;
   shouldCompactBeforeNextRound: (estimatedNextInputTokens: number) => boolean;
+  /** Stream watchdog knobs (defaults 1s poll / 45s idle) — overridable for tests. */
+  streamPollMs?: number;
+  streamIdleTimeoutMs?: number;
   getBudgetState?: () => TokenBudgetState;
   compactBeforeNextRound?: (input: {
     roundId: string;
@@ -256,8 +259,14 @@ export class RoundOrchestrator {
         systemPrompt,
         messages,
       });
-      for await (const chunk of stream) {
+      const iterator = stream[Symbol.asyncIterator]();
+      const TICK = Symbol("tick");
+      const TICK_MS = this.deps.streamPollMs ?? 1_000;
+      const STREAM_IDLE_LIMIT_MS = this.deps.streamIdleTimeoutMs ?? 45_000;
+      let idleElapsed = 0;
+      while (true) {
         if (this.cancelled.has(roundId)) {
+          void iterator.return?.();
           const stoppedBudget = this.deps.recordUsage(usage, ctx.estimatedInputTokens);
           const event: OrchestratorTurnDoneEvent = {
             roundId,
@@ -273,6 +282,32 @@ export class RoundOrchestrator {
           this.deps.onTurnDone(event);
           return event;
         }
+        // Race each pull against a poll tick: a hung stream can never block the
+        // round forever, and stop() stays responsive. Idle budget resets on data.
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const tick = new Promise<typeof TICK>((resolve) => {
+          timer = setTimeout(() => resolve(TICK), TICK_MS);
+        });
+        let step: IteratorResult<OrchestratorStreamChunk> | typeof TICK;
+        try {
+          step = await Promise.race([iterator.next(), tick]);
+        } finally {
+          clearTimeout(timer);
+        }
+        if (step === TICK) {
+          idleElapsed += TICK_MS;
+          if (idleElapsed >= STREAM_IDLE_LIMIT_MS) {
+            void iterator.return?.();
+            throw new TavernRuntimeError(
+              "tavern_stream_idle_timeout",
+              "stream produced no data before idle timeout",
+            );
+          }
+          continue;
+        }
+        idleElapsed = 0;
+        if (step.done) break;
+        const chunk = step.value;
         if (chunk.type === "delta" && chunk.textDelta) {
           accumulated += chunk.textDelta;
           this.deps.onChunk({
