@@ -173,15 +173,16 @@ export function TavernCardDetail({ card, onClose, onDirtyChange }: TavernCardDet
         </div>
         <div className="flex items-center gap-2">
           {dirty && <span className="text-[11px] text-amber-400">未保存</span>}
-          <button
-            type="button"
-            onClick={() => exportMut.mutate()}
-            disabled={dirty || exportMut.isPending}
-            title={dirty ? "先保存再导出" : "导出为 SillyTavern 角色卡（PNG / JSON）"}
-            className="rounded bg-ink-700/60 px-3 py-1.5 text-xs text-ink-300 hover:bg-ink-700 disabled:opacity-50"
-          >
-            {exportMut.isPending ? "导出中…" : "导出"}
-          </button>
+          <span title={dirty ? "先保存再导出" : "导出为 SillyTavern 角色卡（PNG / JSON）"}>
+            <button
+              type="button"
+              onClick={() => exportMut.mutate()}
+              disabled={dirty || exportMut.isPending}
+              className="rounded bg-ink-700/60 px-3 py-1.5 text-xs text-ink-300 hover:bg-ink-700 disabled:opacity-50"
+            >
+              {exportMut.isPending ? "导出中…" : "导出"}
+            </button>
+          </span>
           <button
             type="button"
             onClick={() => saveMut.mutate()}

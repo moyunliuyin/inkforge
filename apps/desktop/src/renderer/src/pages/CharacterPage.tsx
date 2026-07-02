@@ -102,6 +102,7 @@ export function CharacterPage(): JSX.Element {
             setActiveTavernCardId(id);
           }}
           novelCharacters={novelCharsQuery.data || []}
+          importDisabled={cardEditorDirty}
         />
       </aside>
 

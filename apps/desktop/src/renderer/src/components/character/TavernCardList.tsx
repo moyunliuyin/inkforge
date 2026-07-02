@@ -11,6 +11,8 @@ interface TavernCardListProps {
   activeId: string | null;
   onSelect: (id: string) => void;
   novelCharacters: NovelCharacterRecord[];
+  /** Import creates + auto-selects a card; block it while the editor holds unsaved changes. */
+  importDisabled?: boolean;
 }
 
 export function TavernCardList({
@@ -19,6 +21,7 @@ export function TavernCardList({
   activeId,
   onSelect,
   novelCharacters,
+  importDisabled = false,
 }: TavernCardListProps): JSX.Element {
   const queryClient = useQueryClient();
   const providersQuery = useQuery({
@@ -38,13 +41,14 @@ export function TavernCardList({
 
   const importMut = useMutation({
     mutationFn: () => tavernCardApi.importCard(),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
       if (res.cancelled) return;
       if (!res.ok) {
         alert(`导入失败（${res.error.code}）：${res.error.message}`);
         return;
       }
-      queryClient.invalidateQueries({ queryKey: ["tavernCards"] });
+      // Wait for the list refetch so the parent can resolve the new card immediately.
+      await queryClient.invalidateQueries({ queryKey: ["tavernCards"] });
       onSelect(res.card.id);
       if (res.report.droppedFields.length > 0 || res.report.warnings.length > 0) {
         setImportReport({ cardName: res.card.name, report: res.report });
@@ -97,14 +101,15 @@ export function TavernCardList({
           >
             ＋新建
           </button>
-          <button
-            onClick={() => importMut.mutate()}
-            disabled={importMut.isPending}
-            title="导入 SillyTavern 角色卡（PNG / JSON）"
-            className="rounded bg-ink-700/60 px-2 py-1 text-xs text-ink-300 hover:bg-ink-700 disabled:opacity-50"
-          >
-            {importMut.isPending ? "导入中…" : "导入"}
-          </button>
+          <span title={importDisabled ? "先保存或放弃当前卡的修改" : "导入 SillyTavern 角色卡（PNG / JSON）"}>
+            <button
+              onClick={() => importMut.mutate()}
+              disabled={importMut.isPending || importDisabled}
+              className="rounded bg-ink-700/60 px-2 py-1 text-xs text-ink-300 hover:bg-ink-700 disabled:opacity-50"
+            >
+              {importMut.isPending ? "导入中…" : "导入"}
+            </button>
+          </span>
           <div className="relative group">
             <button className="rounded bg-ink-700/60 px-2 py-1 text-xs text-ink-300 hover:bg-ink-700">
               从书中创建

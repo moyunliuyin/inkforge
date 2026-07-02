@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import { dialog, type BrowserWindow } from "electron";
+import { dialog, nativeImage, type BrowserWindow } from "electron";
 import { listProviders } from "@inkforge/storage";
 import type {
   TavernCardAvatarGetInput,
@@ -25,6 +25,7 @@ import {
 } from "./png-text-chunk";
 import {
   createTavernCard,
+  deleteTavernCardRecord,
   getTavernCardRecord,
   updateTavernCardRecord,
 } from "./tavern-card-service";
@@ -159,13 +160,25 @@ function avatarDirAbsolute(): string {
   return path.resolve(getAppContext().userDataDir, AVATAR_DIR);
 }
 
-/** Resolve a stored (relative) avatarPath, refusing anything outside the avatar dir. */
+/**
+ * Resolve a stored (relative) avatarPath, refusing anything outside the avatar
+ * dir. Containment is enforced on real paths (symlinks resolved), so a link
+ * planted inside the avatar dir cannot escape it. Returns null when the file
+ * does not exist.
+ */
 function resolveAvatarAbsolute(avatarPath: string | null): string | null {
   if (!avatarPath) return null;
   const abs = path.resolve(getAppContext().userDataDir, avatarPath);
   const dir = avatarDirAbsolute();
   if (abs !== dir && !abs.startsWith(dir + path.sep)) return null;
-  return abs;
+  try {
+    const realDir = fs.realpathSync.native(dir);
+    const realFile = fs.realpathSync.native(abs);
+    if (realFile !== realDir && !realFile.startsWith(realDir + path.sep)) return null;
+    return realFile;
+  } catch {
+    return null;
+  }
 }
 
 function saveImportedAvatar(cardId: string, pngBytes: Buffer): string {
@@ -241,9 +254,16 @@ export async function importTavernCardFromDialog(
     let jsonText: string;
     if (isPng) {
       pngBytes = fs.readFileSync(filePath);
+      if (pngBytes.length > MAX_CARD_FILE_BYTES) {
+        throw new CardIoError("file-too-large", `card file exceeds ${MAX_CARD_FILE_BYTES} bytes`);
+      }
       jsonText = decodeCharaChunk(pngBytes);
     } else {
-      jsonText = fs.readFileSync(filePath, "utf8");
+      const raw = fs.readFileSync(filePath);
+      if (raw.length > MAX_CARD_FILE_BYTES) {
+        throw new CardIoError("file-too-large", `card file exceeds ${MAX_CARD_FILE_BYTES} bytes`);
+      }
+      jsonText = raw.toString("utf8");
     }
 
     const parsed = parseSillyTavernJson(jsonText);
@@ -268,9 +288,22 @@ export async function importTavernCardFromDialog(
 
     let savedAvatar = false;
     if (pngBytes) {
-      const relative = saveImportedAvatar(card.id, pngBytes);
-      card = updateTavernCardRecord({ id: card.id, avatarPath: relative });
-      savedAvatar = true;
+      try {
+        const relative = saveImportedAvatar(card.id, pngBytes);
+        card = updateTavernCardRecord({ id: card.id, avatarPath: relative });
+        savedAvatar = true;
+      } catch (error) {
+        // Don't leave a half-imported orphan card behind.
+        try {
+          deleteTavernCardRecord({ id: card.id });
+        } catch {
+          /* best effort */
+        }
+        throw new CardIoError(
+          "io-error",
+          `failed to store avatar: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
 
     const report: TavernCardImportReport = {
@@ -337,9 +370,16 @@ export function getTavernCardAvatar(
 ): TavernCardAvatarGetResponse {
   const card = getTavernCardRecord({ id: input.id });
   const abs = resolveAvatarAbsolute(card?.avatarPath ?? null);
-  if (!abs || !fs.existsSync(abs)) return { base64: null };
+  if (!abs) return { base64: null };
   try {
-    return { base64: fs.readFileSync(abs).toString("base64") };
+    const bytes = fs.readFileSync(abs);
+    // Display only needs a thumbnail — cap payloads so multi-MB card PNGs
+    // don't pile up in the renderer cache. Export still uses original bytes.
+    const img = nativeImage.createFromBuffer(bytes);
+    if (!img.isEmpty() && img.getSize().width > 256) {
+      return { base64: img.resize({ width: 256 }).toPNG().toString("base64") };
+    }
+    return { base64: bytes.toString("base64") };
   } catch (error) {
     logger.warn("tavern card avatar read failed", error);
     return { base64: null };
