@@ -155,6 +155,7 @@ const api: InkforgeApi = {
     run: (input) => ipcRenderer.invoke(ipcChannels.tavernRoundRun, input),
     stop: (input) => ipcRenderer.invoke(ipcChannels.tavernRoundStop, input),
     directorPost: (input) => ipcRenderer.invoke(ipcChannels.tavernDirectorPost, input),
+    userPost: (input) => ipcRenderer.invoke(ipcChannels.tavernUserPost, input),
     onChunk: (listener) => subscribe(ipcEventChannels.tavernChunk, listener),
     onDone: (listener) => subscribe(ipcEventChannels.tavernDone, listener),
     onBudgetWarning: (listener) => subscribe(ipcEventChannels.tavernBudgetWarning, listener),

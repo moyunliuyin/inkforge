@@ -12,6 +12,7 @@ const {
   RoundOrchestrator,
   buildOpeningSeedMessages,
   estimateTokensFromText,
+  renderCardText,
 } = require("@inkforge/tavern-engine");
 
 let failed = 0;
@@ -166,6 +167,44 @@ function testContextBuilder() {
     "system prompt 顺序：persona < scenario < mesExample < topic",
   );
   assert(!built.systemPrompt.includes("{{char}}"), "system prompt 无 {{char}} 残留");
+  assert(!built.systemPrompt.includes("用户角色"), "无 userName 时不出现用户角色行");
+
+  const withUser = builder.build({
+    speakerCard: speaker,
+    allCards: [speaker, other],
+    topic: "师门任务",
+    mode: "auto",
+    history: [
+      ...history,
+      {
+        id: "msg-u",
+        sessionId: "s1",
+        characterId: null,
+        role: "user",
+        content: "我有话要说",
+        tokensIn: 0,
+        tokensOut: 0,
+        createdAt: "2026-04-20T10:08:00Z",
+      },
+    ],
+    lastK: 6,
+    userName: "苏牧",
+    userPersona: "一位路过的旅人",
+  });
+  assert(
+    withUser.systemPrompt.includes("用户角色：苏牧") &&
+      withUser.systemPrompt.includes("一位路过的旅人"),
+    "userName+userPersona 进入 system prompt",
+  );
+  assert(
+    withUser.messages.some((m) => m.role === "user" && m.content.startsWith("[苏牧]：我有话要说")),
+    "user 消息以 [用户名] 前缀的 user 段呈现",
+  );
+  assert(
+    renderCardText("{{char}}对{{user}}微笑", "林晚", "苏牧") === "林晚对苏牧微笑",
+    "{{user}} 宏替换为用户名",
+  );
+  assert(renderCardText("{{user}}你好", "林晚") === "User你好", "无用户时 {{user}} 回落 User");
 
   const autoDirector = builder.build({
     speakerCard: speaker,
@@ -279,6 +318,15 @@ function testOpeningSeeder() {
     buildOpeningSeedMessages({ participants: [a, d], history: asHistory }).length === 0,
     "seed 落库后再次调用不重复（幂等）",
   );
+
+  const e2 = { ...makeCard("e", "戊"), firstMes: "欢迎，{{user}}！" };
+  const seedsUser = buildOpeningSeedMessages({
+    participants: [e2],
+    history: [],
+    userName: "苏牧",
+    baseTimeMs: 2000,
+  });
+  assert(seedsUser[0]?.content === "欢迎，苏牧！", "firstMes 中 {{user}} 替换为用户名");
 }
 
 async function testRoundOrchestrator() {
@@ -293,6 +341,7 @@ async function testRoundOrchestrator() {
   };
 
   const buildCalls = [];
+  const buildUserNames = [];
   const turnDones = [];
   let roundDones = 0;
   let compactCalls = 0;
@@ -306,6 +355,7 @@ async function testRoundOrchestrator() {
     },
     buildContext: (i) => {
       buildCalls.push(i.directorMessage);
+      buildUserNames.push(i.userName);
       return { systemPrompt: "sys", messages: [{ role: "user", content: "hi" }] };
     },
     resolveSpeakerRuntime: async (c) => ({ providerId: c.providerId, model: c.model }),
@@ -338,6 +388,7 @@ async function testRoundOrchestrator() {
     topic: "题",
     autoRounds: 3,
     directorMessage: "推动剧情",
+    userName: "苏牧",
   });
 
   assert(turnDones.length === 6, `auto 3 轮 × 2 角色 → 6 个 turn done（实际 ${turnDones.length}）`);
@@ -353,6 +404,10 @@ async function testRoundOrchestrator() {
   assert(
     buildCalls.length > 0 && buildCalls.every((d) => d === "推动剧情"),
     "导演指令在每回合每角色注入（Issue 3，跨轮持续）",
+  );
+  assert(
+    buildUserNames.length > 0 && buildUserNames.every((u) => u === "苏牧"),
+    "userName 透传到每次 buildContext（含估算路径）",
   );
   assert(
     compactCalls === 1,

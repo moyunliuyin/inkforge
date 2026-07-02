@@ -11,6 +11,8 @@ type TavernSessionRow = {
   summary_provider_id: string | null;
   summary_model: string | null;
   last_k: number;
+  user_name: string | null;
+  user_persona: string | null;
   created_at: string;
 };
 
@@ -30,6 +32,8 @@ function rowToRecord(row: TavernSessionRow): TavernSessionRecord {
     summaryProviderId: row.summary_provider_id,
     summaryModel: row.summary_model,
     lastK: row.last_k,
+    userName: row.user_name,
+    userPersona: row.user_persona,
     createdAt: row.created_at,
   };
 }
@@ -44,6 +48,8 @@ export interface CreateTavernSessionInput {
   summaryProviderId?: string | null;
   summaryModel?: string | null;
   lastK?: number;
+  userName?: string | null;
+  userPersona?: string | null;
   createdAt?: string;
 }
 
@@ -63,14 +69,16 @@ export function insertTavernSession(
     summary_provider_id: input.summaryProviderId ?? null,
     summary_model: input.summaryModel ?? null,
     last_k: lastK,
+    user_name: input.userName ?? null,
+    user_persona: input.userPersona ?? null,
     created_at: createdAt,
   };
   db.prepare(
     `INSERT INTO tavern_sessions
        (id, project_id, title, topic, mode, budget_tokens,
-        summary_provider_id, summary_model, last_k, created_at)
+        summary_provider_id, summary_model, last_k, user_name, user_persona, created_at)
      VALUES (@id, @project_id, @title, @topic, @mode, @budget_tokens,
-             @summary_provider_id, @summary_model, @last_k, @created_at)`,
+             @summary_provider_id, @summary_model, @last_k, @user_name, @user_persona, @created_at)`,
   ).run(row);
   return rowToRecord(row);
 }

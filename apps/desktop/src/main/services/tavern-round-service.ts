@@ -54,6 +54,14 @@ interface RoundRuntimeState {
 
 const activeRounds = new Map<string, RoundRuntimeState>();
 
+/** Whether a round is currently executing for the session (used to gate user posts). */
+export function isTavernSessionRunning(sessionId: string): boolean {
+  for (const state of activeRounds.values()) {
+    if (state.sessionId === sessionId) return true;
+  }
+  return false;
+}
+
 function emit<T>(
   window: BrowserWindow | null,
   channel: string,
@@ -113,6 +121,7 @@ export async function startTavernRound(
   const openingSeeds = buildOpeningSeedMessages({
     participants,
     history: listTavernMessages(ctx.db, { sessionId: session.id, order: "asc" }) as TavernMessageRecord[],
+    userName: session.userName,
   });
   if (openingSeeds.length > 0) {
     ctx.db.transaction(() => {
@@ -171,6 +180,8 @@ export async function startTavernRound(
         history: buildInput.history,
         lastK: buildInput.lastK,
         directorMessage: buildInput.directorMessage,
+        userName: buildInput.userName,
+        userPersona: buildInput.userPersona,
       }),
     resolveSpeakerRuntime: async (card) => ({
       providerId: card.providerId,
@@ -284,6 +295,8 @@ export async function startTavernRound(
       topic: session.topic,
       autoRounds,
       directorMessage: input.directorMessage,
+      userName: session.userName,
+      userPersona: session.userPersona,
     })
     .catch((error) => {
       logger.warn("tavern round failed unexpectedly", error);

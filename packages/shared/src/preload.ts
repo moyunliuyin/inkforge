@@ -118,6 +118,8 @@ import type {
   TavernCardAvatarGetResponse,
   TavernDirectorPostInput,
   TavernDirectorPostResponse,
+  TavernUserPostInput,
+  TavernUserPostResponse,
   TavernMessageListInput,
   TavernRoundRunInput,
   TavernRoundRunResponse,
@@ -298,6 +300,7 @@ export interface InkforgeApi {
     run(input: TavernRoundRunInput): Promise<TavernRoundRunResponse>;
     stop(input: TavernRoundStopInput): Promise<TavernRoundStopResponse>;
     directorPost(input: TavernDirectorPostInput): Promise<TavernDirectorPostResponse>;
+    userPost(input: TavernUserPostInput): Promise<TavernUserPostResponse>;
     onChunk(listener: (payload: IpcEventMap["tavern:chunk"]) => void): Unsubscribe;
     onDone(listener: (payload: IpcEventMap["tavern:done"]) => void): Unsubscribe;
     onBudgetWarning(listener: (payload: IpcEventMap["tavern:budget-warning"]) => void): Unsubscribe;

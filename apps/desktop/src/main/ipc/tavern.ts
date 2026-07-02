@@ -20,6 +20,8 @@ import type {
   TavernSessionListInput,
   TavernSessionRecord,
   TavernSummaryCompactInput,
+  TavernUserPostInput,
+  TavernUserPostResponse,
   ipcChannels,
 } from "@inkforge/shared";
 import {
@@ -29,6 +31,7 @@ import {
   listTavernMessagesForSession,
   listTavernSessionsByProject,
   postDirectorMessage,
+  postUserMessage,
 } from "../services/tavern-session-service";
 import {
   startTavernRound,
@@ -47,6 +50,7 @@ const TAVERN_SESSION_LIST: typeof ipcChannels.tavernSessionList = "tavern-sessio
 const TAVERN_SESSION_DELETE: typeof ipcChannels.tavernSessionDelete = "tavern-session:delete";
 const TAVERN_MESSAGE_LIST: typeof ipcChannels.tavernMessageList = "tavern-message:list";
 const TAVERN_DIRECTOR_POST: typeof ipcChannels.tavernDirectorPost = "tavern-director:post";
+const TAVERN_USER_POST: typeof ipcChannels.tavernUserPost = "tavern-user:post";
 const TAVERN_ROUND_RUN: typeof ipcChannels.tavernRoundRun = "tavern-round:run";
 const TAVERN_ROUND_STOP: typeof ipcChannels.tavernRoundStop = "tavern-round:stop";
 const TAVERN_SUMMARY_COMPACT: typeof ipcChannels.tavernSummaryCompact = "tavern-summary:compact";
@@ -89,6 +93,12 @@ export function registerTavernHandlers(getWindow: () => BrowserWindow | null): v
     TAVERN_DIRECTOR_POST,
     async (_event, input: TavernDirectorPostInput): Promise<TavernDirectorPostResponse> => {
       return postDirectorMessage(input);
+    },
+  );
+  ipcMain.handle(
+    TAVERN_USER_POST,
+    async (_event, input: TavernUserPostInput): Promise<TavernUserPostResponse> => {
+      return postUserMessage(input);
     },
   );
   ipcMain.handle(

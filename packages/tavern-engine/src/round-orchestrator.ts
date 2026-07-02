@@ -102,6 +102,8 @@ export interface RoundOrchestratorDeps {
     history: TavernMessageRecord[];
     lastK: number;
     directorMessage?: string;
+    userName?: string | null;
+    userPersona?: string | null;
   }) => { systemPrompt: string; messages: LLMMessage[] };
   resolveSpeakerRuntime: (card: TavernCardRecord) => Promise<{
     providerId: string;
@@ -147,6 +149,8 @@ export interface RoundOrchestratorInput {
   topic: string;
   autoRounds?: number;
   directorMessage?: string;
+  userName?: string | null;
+  userPersona?: string | null;
 }
 
 export class RoundOrchestrator {
@@ -194,6 +198,8 @@ export class RoundOrchestrator {
             history,
             lastK,
             directorMessage: input.directorMessage,
+            userName: input.userName,
+            userPersona: input.userPersona,
           });
           const estimatedInput = this.deps.estimateTokens({ systemPrompt, messages });
           const runtime = await this.deps.resolveSpeakerRuntime(speaker);
@@ -399,6 +405,8 @@ export class RoundOrchestrator {
         history,
         lastK: input.lastK,
         directorMessage: input.directorMessage,
+        userName: input.userName,
+        userPersona: input.userPersona,
       });
       total += this.deps.estimateTokens({ systemPrompt, messages });
     }

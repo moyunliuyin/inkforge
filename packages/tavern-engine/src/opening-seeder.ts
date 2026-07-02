@@ -16,6 +16,7 @@ export interface OpeningSeed {
 export function buildOpeningSeedMessages(input: {
   participants: TavernCardRecord[];
   history: TavernMessageRecord[];
+  userName?: string | null;
   baseTimeMs?: number;
 }): OpeningSeed[] {
   if (input.history.length > 0) return [];
@@ -26,7 +27,7 @@ export function buildOpeningSeedMessages(input: {
     if (!text) continue;
     seeds.push({
       characterId: card.id,
-      content: renderCardText(text, card.name),
+      content: renderCardText(text, card.name, input.userName),
       createdAt: new Date(base + seeds.length).toISOString(),
     });
   }

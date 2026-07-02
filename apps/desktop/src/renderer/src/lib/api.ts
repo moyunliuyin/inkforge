@@ -237,6 +237,7 @@ export const tavernSessionApi = {
   delete: (input: TavernSessionDeleteInput): Promise<{ sessionId: string }> => api().tavernSession.delete(input),
   listMessages: (input: TavernMessageListInput): Promise<TavernMessageRecord[]> => api().tavernMessage.list(input),
   postDirector: (input: TavernDirectorPostInput): Promise<TavernDirectorPostResponse> => api().tavernRound.directorPost(input),
+  postUser: (input: import("@inkforge/shared").TavernUserPostInput): Promise<import("@inkforge/shared").TavernUserPostResponse> => api().tavernRound.userPost(input),
 };
 
 export const tavernRoundApi = {

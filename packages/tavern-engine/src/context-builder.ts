@@ -18,6 +18,9 @@ export interface BuildContextInput {
   lastK: number;
   directorMessage?: string;
   extraSystem?: string;
+  /** User persona joining the scene. Absent/null = spectating. */
+  userName?: string | null;
+  userPersona?: string | null;
 }
 
 export interface BuiltContext {
@@ -43,9 +46,11 @@ function cardsByIdMap(cards: TavernCardRecord[]): Map<string, TavernCardRecord> 
 function speakerLabel(
   message: TavernMessageRecord,
   cards: Map<string, TavernCardRecord>,
+  userName?: string | null,
 ): string {
   if (message.role === "director") return "导演";
   if (message.role === "summary") return "历史摘要";
+  if (message.role === "user") return userName?.trim() || "User";
   if (message.characterId && cards.has(message.characterId)) {
     const card = cards.get(message.characterId);
     if (card) return card.name;
@@ -53,9 +58,14 @@ function speakerLabel(
   return "未知角色";
 }
 
-/** Replace the {{char}} macro with the card's name. {{user}} is deferred to user-persona work. */
-export function renderCardText(text: string, charName: string): string {
-  return text.replaceAll("{{char}}", charName);
+/**
+ * Replace card macros: {{char}} → card name, {{user}} → user persona name
+ * (SillyTavern-compatible fallback "User" when the user is spectating).
+ */
+export function renderCardText(text: string, charName: string, userName?: string | null): string {
+  return text
+    .replaceAll("{{char}}", charName)
+    .replaceAll("{{user}}", userName?.trim() || "User");
 }
 
 export class ContextBuilder {
@@ -69,21 +79,28 @@ export class ContextBuilder {
       lastK,
       directorMessage,
       extraSystem,
+      userName,
+      userPersona,
     } = input;
     const cardMap = cardsByIdMap(allCards);
     const personaLines: string[] = [];
     personaLines.push(`你扮演的角色：${speakerCard.name}`);
     if (speakerCard.persona && speakerCard.persona.trim().length > 0) {
-      personaLines.push(`角色设定：${renderCardText(speakerCard.persona.trim(), speakerCard.name)}`);
+      personaLines.push(
+        `角色设定：${renderCardText(speakerCard.persona.trim(), speakerCard.name, userName)}`,
+      );
     }
     if (speakerCard.scenario && speakerCard.scenario.trim().length > 0) {
-      personaLines.push(`场景设定：${renderCardText(speakerCard.scenario.trim(), speakerCard.name)}`);
+      personaLines.push(
+        `场景设定：${renderCardText(speakerCard.scenario.trim(), speakerCard.name, userName)}`,
+      );
     }
     if (speakerCard.mesExample && speakerCard.mesExample.trim().length > 0) {
       personaLines.push(
         `示例对白（仅作为语气、关系和节奏的参考，不要复述示例原句）：\n${renderCardText(
           speakerCard.mesExample.trim(),
           speakerCard.name,
+          userName,
         )}`,
       );
     }
@@ -96,6 +113,14 @@ export class ContextBuilder {
     const otherNames = allCards.filter((c) => c.id !== speakerCard.id).map((c) => c.name);
     if (otherNames.length > 0) {
       personaLines.push(`同场角色：${otherNames.join("、")}。`);
+    }
+    if (userName && userName.trim().length > 0) {
+      const trimmedPersona = userPersona?.trim();
+      personaLines.push(
+        trimmedPersona
+          ? `用户角色：${userName.trim()}（由真人扮演）：${trimmedPersona}`
+          : `用户角色：${userName.trim()}（由真人扮演）。`,
+      );
     }
     personaLines.push("输出仅包含该角色的本轮发言文本，不要添加旁白、动作标记或 Markdown。");
     if (extraSystem) personaLines.push(extraSystem);
@@ -124,7 +149,7 @@ export class ContextBuilder {
       visible.push(msg.id);
       const isSelf =
         msg.role === "character" && msg.characterId === speakerCard.id;
-      const label = speakerLabel(msg, cardMap);
+      const label = speakerLabel(msg, cardMap, userName);
       if (isSelf) {
         messages.push({ role: "assistant", content: msg.content });
       } else {

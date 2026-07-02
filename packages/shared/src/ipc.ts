@@ -135,6 +135,7 @@ export const ipcChannels = {
   tavernSessionDelete: "tavern-session:delete",
   tavernMessageList: "tavern-message:list",
   tavernDirectorPost: "tavern-director:post",
+  tavernUserPost: "tavern-user:post",
   tavernRoundRun: "tavern-round:run",
   tavernRoundStop: "tavern-round:stop",
   tavernSummaryCompact: "tavern-summary:compact",
@@ -970,6 +971,8 @@ export interface TavernSessionCreateInput {
   summaryProviderId?: string;
   summaryModel?: string;
   lastK?: number;
+  userName?: string;
+  userPersona?: string;
 }
 
 export interface TavernSessionGetInput {
@@ -998,6 +1001,15 @@ export interface TavernDirectorPostInput {
 }
 
 export interface TavernDirectorPostResponse {
+  messageId: string;
+}
+
+export interface TavernUserPostInput {
+  sessionId: string;
+  content: string;
+}
+
+export interface TavernUserPostResponse {
   messageId: string;
 }
 
@@ -1386,6 +1398,7 @@ export interface IpcRequestMap {
   [ipcChannels.tavernSessionDelete]: { req: TavernSessionDeleteInput; res: { sessionId: string } };
   [ipcChannels.tavernMessageList]: { req: TavernMessageListInput; res: TavernMessageRecord[] };
   [ipcChannels.tavernDirectorPost]: { req: TavernDirectorPostInput; res: TavernDirectorPostResponse };
+  [ipcChannels.tavernUserPost]: { req: TavernUserPostInput; res: TavernUserPostResponse };
   [ipcChannels.tavernRoundRun]: { req: TavernRoundRunInput; res: TavernRoundRunResponse };
   [ipcChannels.tavernRoundStop]: { req: TavernRoundStopInput; res: TavernRoundStopResponse };
   [ipcChannels.tavernSummaryCompact]: { req: TavernSummaryCompactInput; res: CompactResult };

@@ -7,6 +7,7 @@ interface RoleBubbleProps {
   message: TavernMessageRecord;
   cardName?: string;
   providerHint?: string;
+  userName?: string;
   isStreaming?: boolean;
 }
 
@@ -23,6 +24,7 @@ export function RoleBubble({
   message,
   cardName,
   providerHint,
+  userName,
   isStreaming = false,
 }: RoleBubbleProps): JSX.Element {
   const currentChapterId = useAppStore((s) => s.currentChapterId);
@@ -59,6 +61,9 @@ export function RoleBubble({
   const isDirector = message.role === "director";
   const isSummary = message.role === "summary";
   const isCharacter = message.role === "character";
+  const isUser = message.role === "user";
+  const rightAligned = isDirector || isUser;
+  const userLabel = userName || "User";
 
   if (isSummary) {
     return (
@@ -80,15 +85,17 @@ export function RoleBubble({
   }
 
   const avatarColor = isCharacter && message.characterId ? hashColor(message.characterId) : "#3b82f6";
-  const avatarLetter = (cardName || (isDirector ? "导" : "?")).charAt(0);
+  const avatarLetter = isUser
+    ? userLabel.charAt(0)
+    : (cardName || (isDirector ? "导" : "?")).charAt(0);
 
   return (
     <>
       <div
         onContextMenu={handleContextMenu}
-        className={`flex gap-2 ${isDirector ? "justify-end" : "justify-start"}`}
+        className={`flex gap-2 ${rightAligned ? "justify-end" : "justify-start"}`}
       >
-        {!isDirector && (
+        {!rightAligned && (
           <div
             className="shrink-0 w-8 h-8 rounded flex items-center justify-center text-white text-sm font-bold"
             style={{ backgroundColor: avatarColor }}
@@ -96,15 +103,16 @@ export function RoleBubble({
             {avatarLetter}
           </div>
         )}
-        <div className={`max-w-[75%] ${isDirector ? "text-right" : "text-left"}`}>
+        <div className={`max-w-[75%] ${rightAligned ? "text-right" : "text-left"}`}>
           <div className="flex items-center gap-2 text-[11px] text-ink-400 mb-0.5">
-            {!isDirector && (
+            {!rightAligned && (
               <>
                 <span className="font-medium text-ink-200">{cardName || "?"}</span>
                 {providerHint && <span>{providerHint}</span>}
               </>
             )}
             {isDirector && <span className="font-medium text-blue-300">导演</span>}
+            {isUser && <span className="font-medium text-amber-300">{userLabel}</span>}
             {(message.tokensIn > 0 || message.tokensOut > 0) && (
               <span>
                 {message.tokensIn}↑ / {message.tokensOut}↓
@@ -115,7 +123,9 @@ export function RoleBubble({
             className={`rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
               isDirector
                 ? "border border-blue-500/50 bg-blue-500/10 text-blue-100"
-                : "border border-ink-700 bg-ink-800/60 text-ink-100"
+                : isUser
+                  ? "border border-amber-500/50 bg-amber-500/10 text-amber-100"
+                  : "border border-ink-700 bg-ink-800/60 text-ink-100"
             }`}
             style={
               isCharacter
@@ -127,8 +137,12 @@ export function RoleBubble({
             {isStreaming && <span className="ml-0.5 animate-pulse text-amber-300">▋</span>}
           </div>
         </div>
-        {isDirector && (
-          <div className="shrink-0 w-8 h-8 rounded bg-blue-500 flex items-center justify-center text-white text-sm font-bold">
+        {rightAligned && (
+          <div
+            className={`shrink-0 w-8 h-8 rounded flex items-center justify-center text-sm font-bold ${
+              isUser ? "bg-amber-500 text-ink-950" : "bg-blue-500 text-white"
+            }`}
+          >
             {avatarLetter}
           </div>
         )}

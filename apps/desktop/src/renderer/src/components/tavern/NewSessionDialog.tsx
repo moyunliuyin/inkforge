@@ -24,6 +24,9 @@ export function NewSessionDialog({
   const [participants, setParticipants] = useState<string[]>([]);
   const [summaryProviderId, setSummaryProviderId] = useState<string>("");
   const [summaryModel, setSummaryModel] = useState("");
+  const [userEnabled, setUserEnabled] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [userPersona, setUserPersona] = useState("");
 
   const queryClient = useQueryClient();
 
@@ -55,6 +58,8 @@ export function NewSessionDialog({
         lastK,
         summaryProviderId: summaryProviderId || undefined,
         summaryModel: summaryProviderId && summaryModel ? summaryModel : undefined,
+        userName: userEnabled && userName.trim() ? userName.trim() : undefined,
+        userPersona: userEnabled && userName.trim() && userPersona.trim() ? userPersona.trim() : undefined,
       }),
     onSuccess: (session) => {
       queryClient.invalidateQueries({ queryKey: ["tavernSessions", projectId] });
@@ -68,6 +73,9 @@ export function NewSessionDialog({
       setLastK(6);
       setSummaryProviderId("");
       setSummaryModel("");
+      setUserEnabled(false);
+      setUserName("");
+      setUserPersona("");
     },
     onError: (err) => {
       alert(`创建失败：${err instanceof Error ? err.message : String(err)}`);
@@ -149,6 +157,33 @@ export function NewSessionDialog({
                 );
               })}
             </div>
+          </div>
+
+          <div>
+            <button
+              type="button"
+              onClick={() => setUserEnabled((v) => !v)}
+              className="flex items-center gap-1.5 text-xs text-amber-300 hover:text-amber-200"
+            >
+              {userEnabled ? "▾" : "▸"} 启用玩家角色（我要下场参与对话）
+            </button>
+            {userEnabled && (
+              <div className="mt-2 space-y-2 border-l border-ink-700 pl-3">
+                <input
+                  type="text"
+                  value={userName}
+                  onChange={(e) => setUserName(e.target.value)}
+                  placeholder="你的角色名（必填才生效）"
+                  className="w-full rounded border border-ink-700 bg-ink-900 px-3 py-2 text-sm text-ink-100"
+                />
+                <textarea
+                  value={userPersona}
+                  onChange={(e) => setUserPersona(e.target.value)}
+                  placeholder="你的人设/动机（可选）：角色们会知道这些"
+                  className="w-full rounded border border-ink-700 bg-ink-900 px-3 py-2 text-sm text-ink-100 resize-none h-16"
+                />
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-3 gap-3">

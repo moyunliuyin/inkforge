@@ -70,6 +70,7 @@ const EXPECTED_INDEXES = [
   "idx_character_sync_log_novel_at",
   "idx_tavern_sessions_project_created",
   "idx_tavern_messages_session_created",
+  "idx_tavern_messages_session_role_created",
   "uidx_tavern_cards_linked_novel_character",
   "uidx_characters_linked_tavern_card",
   "idx_world_project",
@@ -103,7 +104,7 @@ const EXPECTED_INDEXES = [
   "idx_world_rel_dst",
 ];
 
-const EXPECTED_MAX_VERSION = 22;
+const EXPECTED_MAX_VERSION = 23;
 const EXPECTED_VERSIONS = Array.from(
   { length: EXPECTED_MAX_VERSION },
   (_, i) => i + 1,
@@ -116,6 +117,97 @@ function fail(msg) {
 
 function ok(msg) {
   console.log(`\x1b[32m✓ ${msg}\x1b[0m`);
+}
+
+function fixtureV22Upgrade() {
+  console.log("[verify-migrations] v22 → v23 upgrade fixture");
+  const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "inkforge-verify-v22-"));
+  let db;
+  try {
+    db = openDatabase({ workspaceDir });
+    // Minimal v22-era schema for the tables v23 touches (+ schema_migrations 1..22 marked applied).
+    db.exec(`
+      CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, path TEXT NOT NULL, created_at TEXT NOT NULL, daily_goal INTEGER NOT NULL DEFAULT 1000, last_opened TEXT);
+      CREATE TABLE tavern_cards (id TEXT PRIMARY KEY, name TEXT NOT NULL);
+      CREATE TABLE tavern_sessions (
+        id TEXT PRIMARY KEY, project_id TEXT NOT NULL, title TEXT NOT NULL, topic TEXT NOT NULL,
+        mode TEXT NOT NULL CHECK(mode IN ('director', 'auto')),
+        budget_tokens INTEGER NOT NULL CHECK(budget_tokens > 0),
+        summary_provider_id TEXT, summary_model TEXT,
+        last_k INTEGER NOT NULL DEFAULT 6 CHECK(last_k > 0),
+        created_at TEXT NOT NULL,
+        FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+      CREATE TABLE tavern_messages (
+        id TEXT PRIMARY KEY, session_id TEXT NOT NULL, character_id TEXT,
+        role TEXT NOT NULL CHECK(role IN ('director', 'character', 'summary')),
+        content TEXT NOT NULL,
+        tokens_in INTEGER NOT NULL DEFAULT 0 CHECK(tokens_in >= 0),
+        tokens_out INTEGER NOT NULL DEFAULT 0 CHECK(tokens_out >= 0),
+        created_at TEXT NOT NULL,
+        FOREIGN KEY(session_id) REFERENCES tavern_sessions(id) ON DELETE CASCADE
+      );
+      CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL);
+      INSERT INTO projects VALUES ('p1', 'P', '/tmp/p', '2026-01-01T00:00:00Z', 1000, NULL);
+      INSERT INTO tavern_sessions (id, project_id, title, topic, mode, budget_tokens, created_at)
+        VALUES ('s1', 'p1', 'T', '议题', 'auto', 20000, '2026-01-01T00:00:00Z');
+      INSERT INTO tavern_messages VALUES ('m1', 's1', NULL, 'director', '指令', 0, 0, '2026-01-01T00:00:01Z');
+      INSERT INTO tavern_messages VALUES ('m2', 's1', NULL, 'character', '台词', 12, 34, '2026-01-01T00:00:02Z');
+      INSERT INTO tavern_messages VALUES ('m3', 's1', NULL, 'summary', '摘要', 0, 0, '2026-01-01T00:00:03Z');
+    `);
+    const mark = db.prepare(`INSERT INTO schema_migrations VALUES (?, ?, ?)`);
+    for (let v = 1; v <= 22; v += 1) mark.run(v, `fixture_v${v}`, "2026-01-01T00:00:00Z");
+
+    const applied = runMigrations(db);
+    if (applied === 1) {
+      ok("v22 库上仅追加 1 个迁移（v23）");
+    } else {
+      fail(`expected exactly 1 migration on a v22 DB, applied ${applied}`);
+    }
+
+    const rows = db
+      .prepare(`SELECT * FROM tavern_messages ORDER BY created_at ASC`)
+      .all();
+    const preserved =
+      rows.length === 3 &&
+      rows[0].id === "m1" && rows[0].role === "director" && rows[0].content === "指令" &&
+      rows[1].id === "m2" && rows[1].role === "character" && rows[1].tokens_in === 12 && rows[1].tokens_out === 34 &&
+      rows[2].id === "m3" && rows[2].role === "summary";
+    if (preserved) {
+      ok("重建后 3 条历史消息字段级保真");
+    } else {
+      fail(`rebuild lost data: ${JSON.stringify(rows)}`);
+    }
+
+    db.prepare(
+      `INSERT INTO tavern_messages VALUES ('m4', 's1', NULL, 'user', '玩家发言', 0, 0, '2026-01-01T00:00:04Z')`,
+    ).run();
+    ok("重建后可插入 role='user' 行");
+    let rejected = false;
+    try {
+      db.prepare(
+        `INSERT INTO tavern_messages VALUES ('m5', 's1', NULL, 'bogus', 'x', 0, 0, '2026-01-01T00:00:05Z')`,
+      ).run();
+    } catch {
+      rejected = true;
+    }
+    if (rejected) {
+      ok("role CHECK 仍拒绝非法值");
+    } else {
+      fail("role CHECK no longer rejects invalid values");
+    }
+  } finally {
+    try {
+      db?.close();
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.rmSync(workspaceDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 function main() {
@@ -182,6 +274,26 @@ function main() {
     } else {
       ok("tavern_cards has v21/v22 columns (max_tokens, first_mes, scenario, mes_example)");
     }
+
+    // v23 · user persona columns + tavern_messages role CHECK includes 'user'
+    const sessionCols = db
+      .prepare(`PRAGMA table_info(tavern_sessions)`)
+      .all()
+      .map((r) => r.name);
+    const missingSessionCols = ["user_name", "user_persona"].filter((c) => !sessionCols.includes(c));
+    if (missingSessionCols.length > 0) {
+      fail(`tavern_sessions missing columns: ${missingSessionCols.join(", ")}`);
+    } else {
+      ok("tavern_sessions has v23 columns (user_name, user_persona)");
+    }
+    const msgSql = db
+      .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tavern_messages'`)
+      .get()?.sql;
+    if (msgSql && /CHECK\s*\(\s*role\s+IN\s*\([^)]*'user'/i.test(msgSql)) {
+      ok("tavern_messages role CHECK includes 'user'");
+    } else {
+      fail("tavern_messages role CHECK does not include 'user'");
+    }
   } finally {
     try {
       db?.close();
@@ -198,7 +310,12 @@ function main() {
   if (process.exitCode && process.exitCode !== 0) {
     console.error("\x1b[31m迁移回放验证失败\x1b[0m");
   } else {
-    console.log("\x1b[32m迁移回放验证通过\x1b[0m");
+    fixtureV22Upgrade();
+    if (process.exitCode && process.exitCode !== 0) {
+      console.error("\x1b[31m迁移回放验证失败\x1b[0m");
+    } else {
+      console.log("\x1b[32m迁移回放验证通过\x1b[0m");
+    }
   }
 }
 

@@ -94,6 +94,7 @@ export function Stage({ sessionId, sessions }: StageProps): JSX.Element {
             message={msg}
             cardName={getCardName(msg.characterId) ?? undefined}
             providerHint={getProviderHint(msg.characterId) ?? undefined}
+            userName={session.userName ?? undefined}
           />
         ))}
         {streamBuffer && streamBuffer.text.length > 0 && (

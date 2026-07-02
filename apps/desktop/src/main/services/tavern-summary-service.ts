@@ -71,6 +71,7 @@ export async function compactTavernHistory(
     formatSpeakerName: (message) => {
       if (message.role === "director") return "导演";
       if (message.role === "summary") return "历史摘要";
+      if (message.role === "user") return session.userName?.trim() || "User";
       if (message.characterId) {
         const card = getTavernCardById(ctx.db, message.characterId);
         if (card) return card.name;

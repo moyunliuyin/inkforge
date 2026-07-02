@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { TavernCardRecord, TavernMode, TavernSessionRecord } from "@inkforge/shared";
-import { tavernEventsApi, tavernRoundApi, tavernSummaryApi } from "../../lib/api";
+import { tavernEventsApi, tavernRoundApi, tavernSessionApi, tavernSummaryApi } from "../../lib/api";
 
 interface DirectorPanelProps {
   session: TavernSessionRecord;
@@ -28,8 +28,12 @@ export function DirectorPanel({ session, cards }: DirectorPanelProps): JSX.Eleme
   const [participants, setParticipants] = useState<string[]>([]);
   const [autoRounds, setAutoRounds] = useState(3);
   const [directorMessage, setDirectorMessage] = useState("");
+  const [directorOpen, setDirectorOpen] = useState(false);
+  const [userSpeech, setUserSpeech] = useState("");
   const [compactKeepLastK, setCompactKeepLastK] = useState(session.lastK);
   const [compactOpen, setCompactOpen] = useState(false);
+
+  const hasUserPersona = !!session.userName && session.userName.trim().length > 0;
 
   const isRunning = lifecycle === "running" || lifecycle === "stopping";
 
@@ -53,6 +57,9 @@ export function DirectorPanel({ session, cards }: DirectorPanelProps): JSX.Eleme
     setMode(session.mode);
     setParticipants([]);
     setCompactKeepLastK(session.lastK);
+    setDirectorMessage("");
+    setDirectorOpen(false);
+    setUserSpeech("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id]);
 
@@ -136,12 +143,33 @@ export function DirectorPanel({ session, cards }: DirectorPanelProps): JSX.Eleme
     },
   });
 
+  const speakMut = useMutation({
+    mutationFn: (input: { content: string; thenAdvance: boolean }) =>
+      tavernSessionApi.postUser({ sessionId: session.id, content: input.content }),
+    onSuccess: (_res, input) => {
+      setUserSpeech("");
+      queryClient.invalidateQueries({ queryKey: ["tavernMessages", session.id] });
+      if (input.thenAdvance) runMut.mutate();
+    },
+    onError: (err) => {
+      alert(`发言失败：${err instanceof Error ? err.message : String(err)}`);
+    },
+  });
+
   const canRun =
     participants.length >= 1 &&
     (lifecycle === "idle" || lifecycle === "failed") &&
     !runMut.isPending &&
     !stopMut.isPending &&
-    !compactMut.isPending;
+    !compactMut.isPending &&
+    !speakMut.isPending;
+
+  const canSpeak =
+    hasUserPersona &&
+    userSpeech.trim().length > 0 &&
+    (lifecycle === "idle" || lifecycle === "failed") &&
+    !speakMut.isPending &&
+    !runMut.isPending;
 
   return (
     <div className="border-t border-ink-700 bg-ink-800/40 p-3 space-y-2">
@@ -213,13 +241,55 @@ export function DirectorPanel({ session, cards }: DirectorPanelProps): JSX.Eleme
         })}
       </div>
 
-      <textarea
-        value={directorMessage}
-        onChange={(e) => setDirectorMessage(e.target.value)}
-        disabled={isRunning}
-        placeholder="导演指令（可选）：引导本次推进的剧情走向，对每个角色生效，不写入对话历史"
-        className="w-full rounded border border-ink-700 bg-ink-900 px-2 py-1.5 text-xs text-ink-100 resize-none h-12 disabled:opacity-50"
-      />
+      {hasUserPersona && (
+        <div className="flex gap-2">
+          <textarea
+            value={userSpeech}
+            onChange={(e) => setUserSpeech(e.target.value)}
+            disabled={isRunning}
+            placeholder={`扮演 ${session.userName} 发言…（写入对话，角色们会回应）`}
+            className="flex-1 rounded border border-amber-500/40 bg-ink-900 px-2 py-1.5 text-xs text-ink-100 resize-none h-12 focus:border-amber-500/70 outline-none disabled:opacity-50"
+          />
+          <div className="flex shrink-0 flex-col justify-between gap-1">
+            <button
+              type="button"
+              onClick={() => speakMut.mutate({ content: userSpeech.trim(), thenAdvance: false })}
+              disabled={!canSpeak}
+              className="rounded bg-amber-500/20 px-3 py-1 text-xs text-amber-200 hover:bg-amber-500/30 disabled:opacity-40"
+            >
+              发言
+            </button>
+            <button
+              type="button"
+              onClick={() => speakMut.mutate({ content: userSpeech.trim(), thenAdvance: true })}
+              disabled={!canSpeak || participants.length < 1}
+              title={participants.length < 1 ? "先选择参与角色" : "发言后立即推进一轮"}
+              className="rounded bg-amber-500 px-3 py-1 text-xs font-medium text-ink-950 hover:bg-amber-400 disabled:opacity-40"
+            >
+              发言并推进
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <button
+          type="button"
+          onClick={() => setDirectorOpen((v) => !v)}
+          className="flex items-center gap-1 text-[11px] text-ink-400 hover:text-ink-200"
+        >
+          {directorOpen ? "▾" : "▸"} 导演指令（幕后引导，临时注入，不写入对话）
+        </button>
+        {directorOpen && (
+          <textarea
+            value={directorMessage}
+            onChange={(e) => setDirectorMessage(e.target.value)}
+            disabled={isRunning}
+            placeholder="引导本次推进的剧情走向，对每个角色生效"
+            className="mt-1 w-full rounded border border-ink-700 bg-ink-950 px-2 py-1.5 text-xs text-ink-300 resize-none h-12 disabled:opacity-50"
+          />
+        )}
+      </div>
 
       <div className="flex items-center gap-2">
         {isRunning ? (

@@ -283,7 +283,7 @@ export interface SkillDefinition {
 
 export type TavernMode = "director" | "auto";
 
-export type TavernRole = "director" | "character" | "summary";
+export type TavernRole = "director" | "character" | "summary" | "user";
 
 export type SyncMode = "two-way" | "snapshot" | "detached";
 
@@ -350,6 +350,9 @@ export interface TavernSessionRecord {
   summaryProviderId: string | null;
   summaryModel: string | null;
   lastK: number;
+  /** User persona joining the scene as a speaker. null = spectating. */
+  userName: string | null;
+  userPersona: string | null;
   createdAt: string;
 }
 

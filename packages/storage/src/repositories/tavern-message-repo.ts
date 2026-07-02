@@ -13,7 +13,9 @@ type TavernMessageRow = {
 };
 
 function normalizeRole(value: string): TavernRole {
-  if (value === "director" || value === "character" || value === "summary") return value;
+  if (value === "director" || value === "character" || value === "summary" || value === "user") {
+    return value;
+  }
   return "character";
 }
 

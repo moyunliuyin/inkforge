@@ -882,6 +882,70 @@ const migrations: Migration[] = [
       }
     },
   },
+  {
+    // ===================================================================
+    // v23 · Tavern user persona (user joins the scene as a speaker)
+    //
+    // - tavern_sessions gains user_name / user_persona (NULL = spectating).
+    // - tavern_messages role CHECK gains 'user'. SQLite cannot alter a CHECK,
+    //   so the table is rebuilt (create → copy → drop → rename → re-index).
+    //   No FK points TO tavern_messages, and the migration runner already
+    //   wraps each migration in a transaction, so no foreign_keys toggling.
+    // ===================================================================
+    version: 23,
+    name: "tavern_user_persona_messages_role",
+    up: (db) => {
+      const sessionCols = db
+        .prepare(`PRAGMA table_info(tavern_sessions)`)
+        .all()
+        .map((row) => (row as { name: string }).name);
+      if (!sessionCols.includes("user_name")) {
+        db.exec(`ALTER TABLE tavern_sessions ADD COLUMN user_name TEXT`);
+      }
+      if (!sessionCols.includes("user_persona")) {
+        db.exec(`ALTER TABLE tavern_sessions ADD COLUMN user_persona TEXT`);
+      }
+
+      const tableSql = (
+        db
+          .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tavern_messages'`)
+          .get() as { sql: string } | undefined
+      )?.sql;
+      const roleCheckHasUser =
+        !!tableSql && /CHECK\s*\(\s*role\s+IN\s*\([^)]*'user'/i.test(tableSql);
+      if (!roleCheckHasUser) {
+        db.exec(`
+          CREATE TABLE tavern_messages_new (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            character_id TEXT,
+            role TEXT NOT NULL CHECK(role IN ('director', 'character', 'summary', 'user')),
+            content TEXT NOT NULL,
+            tokens_in INTEGER NOT NULL DEFAULT 0 CHECK(tokens_in >= 0),
+            tokens_out INTEGER NOT NULL DEFAULT 0 CHECK(tokens_out >= 0),
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(session_id) REFERENCES tavern_sessions(id) ON DELETE CASCADE,
+            FOREIGN KEY(character_id) REFERENCES tavern_cards(id) ON DELETE SET NULL
+          );
+
+          INSERT INTO tavern_messages_new
+            (id, session_id, character_id, role, content, tokens_in, tokens_out, created_at)
+          SELECT
+            id, session_id, character_id, role, content, tokens_in, tokens_out, created_at
+          FROM tavern_messages;
+
+          DROP TABLE tavern_messages;
+          ALTER TABLE tavern_messages_new RENAME TO tavern_messages;
+        `);
+      }
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_tavern_messages_session_created
+          ON tavern_messages(session_id, created_at ASC);
+        CREATE INDEX IF NOT EXISTS idx_tavern_messages_session_role_created
+          ON tavern_messages(session_id, role, created_at ASC);
+      `);
+    },
+  },
 ];
 
 export function runMigrations(db: DB): number {
