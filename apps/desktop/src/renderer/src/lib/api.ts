@@ -219,6 +219,9 @@ export const tavernCardApi = {
   get: (input: import("@inkforge/shared").TavernCardGetInput): Promise<import("@inkforge/shared").TavernCardRecord | null> => api().tavernCard.get(input),
   list: (input?: import("@inkforge/shared").TavernCardListInput): Promise<import("@inkforge/shared").TavernCardRecord[]> => api().tavernCard.list(input),
   delete: (input: import("@inkforge/shared").TavernCardDeleteInput): Promise<{ id: string }> => api().tavernCard.delete(input),
+  importCard: (): Promise<import("@inkforge/shared").TavernCardImportResponse> => api().tavernCard.importCard(),
+  exportCard: (input: import("@inkforge/shared").TavernCardExportInput): Promise<import("@inkforge/shared").TavernCardExportResponse> => api().tavernCard.exportCard(input),
+  getAvatar: (input: import("@inkforge/shared").TavernCardAvatarGetInput): Promise<import("@inkforge/shared").TavernCardAvatarGetResponse> => api().tavernCard.getAvatar(input),
 };
 
 export const characterSyncApi = {

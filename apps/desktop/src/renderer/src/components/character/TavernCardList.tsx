@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { NovelCharacterRecord, TavernCardRecord, ProviderRecord } from "@inkforge/shared";
+import { NovelCharacterRecord, TavernCardRecord, ProviderRecord, TavernCardImportReport } from "@inkforge/shared";
 import { tavernCardApi, providerApi } from "../../lib/api";
 import { useQuery } from "@tanstack/react-query";
+import { TavernCardAvatar } from "./TavernCardAvatar";
 
 interface TavernCardListProps {
   projectId: string;
@@ -29,6 +31,27 @@ export function TavernCardList({
     onSuccess: (newCard) => {
       queryClient.invalidateQueries({ queryKey: ["tavernCards"] });
       onSelect(newCard.id);
+    },
+  });
+
+  const [importReport, setImportReport] = useState<{ cardName: string; report: TavernCardImportReport } | null>(null);
+
+  const importMut = useMutation({
+    mutationFn: () => tavernCardApi.importCard(),
+    onSuccess: (res) => {
+      if (res.cancelled) return;
+      if (!res.ok) {
+        alert(`导入失败（${res.error.code}）：${res.error.message}`);
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ["tavernCards"] });
+      onSelect(res.card.id);
+      if (res.report.droppedFields.length > 0 || res.report.warnings.length > 0) {
+        setImportReport({ cardName: res.card.name, report: res.report });
+      }
+    },
+    onError: (err) => {
+      alert(`导入失败：${err instanceof Error ? err.message : String(err)}`);
     },
   });
 
@@ -74,6 +97,14 @@ export function TavernCardList({
           >
             ＋新建
           </button>
+          <button
+            onClick={() => importMut.mutate()}
+            disabled={importMut.isPending}
+            title="导入 SillyTavern 角色卡（PNG / JSON）"
+            className="rounded bg-ink-700/60 px-2 py-1 text-xs text-ink-300 hover:bg-ink-700 disabled:opacity-50"
+          >
+            {importMut.isPending ? "导入中…" : "导入"}
+          </button>
           <div className="relative group">
             <button className="rounded bg-ink-700/60 px-2 py-1 text-xs text-ink-300 hover:bg-ink-700">
               从书中创建
@@ -106,9 +137,7 @@ export function TavernCardList({
                 activeId === card.id ? "bg-ink-700/50" : "hover:bg-ink-700/20"
               }`}
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-ink-700 text-lg">
-                🎭
-              </div>
+              <TavernCardAvatar card={card} sizeClassName="h-10 w-10" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between">
                   <span className="truncate text-sm font-medium text-ink-100">{card.name}</span>
@@ -132,6 +161,37 @@ export function TavernCardList({
           <div className="p-8 text-center text-xs text-ink-500">暂无酒馆卡</div>
         )}
       </div>
+
+      {importReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-sm rounded-lg border border-ink-700 bg-ink-800 p-5 shadow-xl">
+            <h3 className="mb-2 text-sm font-medium text-amber-300">导入完成</h3>
+            <p className="mb-3 text-xs text-ink-200">
+              「{importReport.cardName}」已导入（{importReport.report.spec === "chara_card_v2" ? "V2 卡" : "V1 旧格式"}
+              {importReport.report.savedAvatar ? "，头像已保存" : ""}），以下内容做了调整：
+            </p>
+            <ul className="mb-4 max-h-48 space-y-1 overflow-auto text-xs text-ink-400 scrollbar-thin">
+              {importReport.report.droppedFields.map((field) => (
+                <li key={field}>
+                  · 忽略暂不支持的字段 <span className="font-mono text-ink-300">{field}</span>
+                </li>
+              ))}
+              {importReport.report.warnings.map((w) => (
+                <li key={w}>· {w}</li>
+              ))}
+            </ul>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setImportReport(null)}
+                className="rounded bg-amber-500 px-4 py-1.5 text-xs font-medium text-ink-950 hover:bg-amber-400"
+              >
+                好的
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

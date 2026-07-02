@@ -1,6 +1,11 @@
 import { ipcMain, type BrowserWindow } from "electron";
 import type {
   CompactResult,
+  TavernCardAvatarGetInput,
+  TavernCardAvatarGetResponse,
+  TavernCardExportInput,
+  TavernCardExportResponse,
+  TavernCardImportResponse,
   TavernDirectorPostInput,
   TavernDirectorPostResponse,
   TavernMessageListInput,
@@ -30,6 +35,11 @@ import {
   stopTavernRound,
 } from "../services/tavern-round-service";
 import { compactTavernHistory } from "../services/tavern-summary-service";
+import {
+  exportTavernCardToDialog,
+  getTavernCardAvatar,
+  importTavernCardFromDialog,
+} from "../services/tavern-card-io-service";
 
 const TAVERN_SESSION_CREATE: typeof ipcChannels.tavernSessionCreate = "tavern-session:create";
 const TAVERN_SESSION_GET: typeof ipcChannels.tavernSessionGet = "tavern-session:get";
@@ -40,6 +50,9 @@ const TAVERN_DIRECTOR_POST: typeof ipcChannels.tavernDirectorPost = "tavern-dire
 const TAVERN_ROUND_RUN: typeof ipcChannels.tavernRoundRun = "tavern-round:run";
 const TAVERN_ROUND_STOP: typeof ipcChannels.tavernRoundStop = "tavern-round:stop";
 const TAVERN_SUMMARY_COMPACT: typeof ipcChannels.tavernSummaryCompact = "tavern-summary:compact";
+const TAVERN_CARD_IMPORT: typeof ipcChannels.tavernCardImport = "tavern-card:import";
+const TAVERN_CARD_EXPORT: typeof ipcChannels.tavernCardExport = "tavern-card:export";
+const TAVERN_CARD_AVATAR_GET: typeof ipcChannels.tavernCardAvatarGet = "tavern-card-avatar:get";
 
 export function registerTavernHandlers(getWindow: () => BrowserWindow | null): void {
   ipcMain.handle(
@@ -94,6 +107,21 @@ export function registerTavernHandlers(getWindow: () => BrowserWindow | null): v
     TAVERN_SUMMARY_COMPACT,
     async (_event, input: TavernSummaryCompactInput): Promise<CompactResult> => {
       return compactTavernHistory(input);
+    },
+  );
+  ipcMain.handle(TAVERN_CARD_IMPORT, async (): Promise<TavernCardImportResponse> => {
+    return importTavernCardFromDialog(getWindow());
+  });
+  ipcMain.handle(
+    TAVERN_CARD_EXPORT,
+    async (_event, input: TavernCardExportInput): Promise<TavernCardExportResponse> => {
+      return exportTavernCardToDialog(input, getWindow());
+    },
+  );
+  ipcMain.handle(
+    TAVERN_CARD_AVATAR_GET,
+    async (_event, input: TavernCardAvatarGetInput): Promise<TavernCardAvatarGetResponse> => {
+      return getTavernCardAvatar(input);
     },
   );
 }

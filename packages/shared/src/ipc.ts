@@ -118,6 +118,9 @@ export const ipcChannels = {
   tavernCardGet: "tavern-card:get",
   tavernCardList: "tavern-card:list",
   tavernCardDelete: "tavern-card:delete",
+  tavernCardImport: "tavern-card:import",
+  tavernCardExport: "tavern-card:export",
+  tavernCardAvatarGet: "tavern-card-avatar:get",
   novelCharacterCreate: "novel-character:create",
   novelCharacterUpdate: "novel-character:update",
   novelCharacterGet: "novel-character:get",
@@ -837,6 +840,59 @@ export interface TavernCardDeleteInput {
   id: string;
 }
 
+// ---------- Tavern card import/export (SillyTavern V2 cards) ----------
+
+export type TavernCardImportSource = "png" | "json";
+export type TavernCardSpecKind = "chara_card_v2" | "legacy_v1";
+
+export type TavernCardIoErrorCode =
+  | "not-a-png"
+  | "no-chara-chunk"
+  | "bad-base64"
+  | "bad-json"
+  | "unsupported-spec"
+  | "no-provider"
+  | "card-not-found"
+  | "file-too-large"
+  | "io-error";
+
+export interface TavernCardIoError {
+  code: TavernCardIoErrorCode;
+  message: string;
+}
+
+export interface TavernCardImportReport {
+  source: TavernCardImportSource;
+  spec: TavernCardSpecKind;
+  /** Non-empty V2 fields we have no model for (character_book, alternate_greetings, …). */
+  droppedFields: string[];
+  warnings: string[];
+  savedAvatar: boolean;
+}
+
+export type TavernCardImportResponse =
+  | { ok: true; cancelled: false; card: TavernCardRecord; report: TavernCardImportReport }
+  | { ok: false; cancelled: true; card: null; report: null }
+  | { ok: false; cancelled: false; card: null; report: null; error: TavernCardIoError };
+
+export interface TavernCardExportInput {
+  id: string;
+}
+
+export type TavernCardExportResponse =
+  | { ok: true; cancelled: false; path: string; format: "png" | "json"; usedPlaceholderAvatar: boolean }
+  | { ok: false; cancelled: true; path: null }
+  | { ok: false; cancelled: false; path: null; error: TavernCardIoError };
+
+export interface TavernCardAvatarGetInput {
+  id: string;
+}
+
+export interface TavernCardAvatarGetResponse {
+  /** Base64 PNG bytes for direct renderer display; null when the card has no stored avatar. */
+  base64: string | null;
+}
+
 export interface NovelCharacterCreateInput {
   projectId: string;
   name: string;
@@ -1313,6 +1369,9 @@ export interface IpcRequestMap {
   [ipcChannels.tavernCardGet]: { req: TavernCardGetInput; res: TavernCardRecord | null };
   [ipcChannels.tavernCardList]: { req: TavernCardListInput; res: TavernCardRecord[] };
   [ipcChannels.tavernCardDelete]: { req: TavernCardDeleteInput; res: { id: string } };
+  [ipcChannels.tavernCardImport]: { req: Record<string, never>; res: TavernCardImportResponse };
+  [ipcChannels.tavernCardExport]: { req: TavernCardExportInput; res: TavernCardExportResponse };
+  [ipcChannels.tavernCardAvatarGet]: { req: TavernCardAvatarGetInput; res: TavernCardAvatarGetResponse };
   [ipcChannels.novelCharacterCreate]: { req: NovelCharacterCreateInput; res: NovelCharacterRecord };
   [ipcChannels.novelCharacterUpdate]: { req: NovelCharacterUpdateInput; res: NovelCharacterRecord };
   [ipcChannels.novelCharacterGet]: { req: NovelCharacterGetInput; res: NovelCharacterRecord | null };

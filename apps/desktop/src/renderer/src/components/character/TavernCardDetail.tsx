@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ProviderRecord, SyncMode, TavernCardRecord } from "@inkforge/shared";
 import { providerApi, tavernCardApi } from "../../lib/api";
+import { TavernCardAvatar } from "./TavernCardAvatar";
 
 interface TavernCardDetailProps {
   card: TavernCardRecord;
@@ -106,6 +107,21 @@ export function TavernCardDetail({ card, onClose, onDirtyChange }: TavernCardDet
     },
   });
 
+  const exportMut = useMutation({
+    mutationFn: () => tavernCardApi.exportCard({ id: card.id }),
+    onSuccess: (res) => {
+      if (res.cancelled) return;
+      if (!res.ok) {
+        alert(`导出失败（${res.error.code}）：${res.error.message}`);
+        return;
+      }
+      alert(`已导出 ${res.format.toUpperCase()} 到：\n${res.path}`);
+    },
+    onError: (err) => {
+      alert(`导出失败：${err instanceof Error ? err.message : String(err)}`);
+    },
+  });
+
   const set = <K extends keyof CardForm>(key: K, value: CardForm[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -142,9 +158,7 @@ export function TavernCardDetail({ card, onClose, onDirtyChange }: TavernCardDet
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between border-b border-ink-700 bg-ink-800/40 px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ink-700 text-lg">
-            🎭
-          </div>
+          <TavernCardAvatar card={card} sizeClassName="h-9 w-9" />
           <div className="min-w-0">
             <input
               value={form.name}
@@ -159,6 +173,15 @@ export function TavernCardDetail({ card, onClose, onDirtyChange }: TavernCardDet
         </div>
         <div className="flex items-center gap-2">
           {dirty && <span className="text-[11px] text-amber-400">未保存</span>}
+          <button
+            type="button"
+            onClick={() => exportMut.mutate()}
+            disabled={dirty || exportMut.isPending}
+            title={dirty ? "先保存再导出" : "导出为 SillyTavern 角色卡（PNG / JSON）"}
+            className="rounded bg-ink-700/60 px-3 py-1.5 text-xs text-ink-300 hover:bg-ink-700 disabled:opacity-50"
+          >
+            {exportMut.isPending ? "导出中…" : "导出"}
+          </button>
           <button
             type="button"
             onClick={() => saveMut.mutate()}

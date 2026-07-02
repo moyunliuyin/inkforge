@@ -126,6 +126,9 @@ const api: InkforgeApi = {
     get: (input) => ipcRenderer.invoke(ipcChannels.tavernCardGet, input),
     list: (input = {}) => ipcRenderer.invoke(ipcChannels.tavernCardList, input),
     delete: (input) => ipcRenderer.invoke(ipcChannels.tavernCardDelete, input),
+    importCard: () => ipcRenderer.invoke(ipcChannels.tavernCardImport, {}),
+    exportCard: (input) => ipcRenderer.invoke(ipcChannels.tavernCardExport, input),
+    getAvatar: (input) => ipcRenderer.invoke(ipcChannels.tavernCardAvatarGet, input),
   },
   novelCharacter: {
     create: (input) => ipcRenderer.invoke(ipcChannels.novelCharacterCreate, input),

@@ -111,6 +111,11 @@ import type {
   TavernCardGetInput,
   TavernCardListInput,
   TavernCardUpdateInput,
+  TavernCardImportResponse,
+  TavernCardExportInput,
+  TavernCardExportResponse,
+  TavernCardAvatarGetInput,
+  TavernCardAvatarGetResponse,
   TavernDirectorPostInput,
   TavernDirectorPostResponse,
   TavernMessageListInput,
@@ -264,6 +269,9 @@ export interface InkforgeApi {
     get(input: TavernCardGetInput): Promise<TavernCardRecord | null>;
     list(input?: TavernCardListInput): Promise<TavernCardRecord[]>;
     delete(input: TavernCardDeleteInput): Promise<{ id: string }>;
+    importCard(): Promise<TavernCardImportResponse>;
+    exportCard(input: TavernCardExportInput): Promise<TavernCardExportResponse>;
+    getAvatar(input: TavernCardAvatarGetInput): Promise<TavernCardAvatarGetResponse>;
   };
   novelCharacter: {
     create(input: NovelCharacterCreateInput): Promise<NovelCharacterRecord>;
