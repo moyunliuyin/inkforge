@@ -96,7 +96,8 @@ export function CharacterPage(): JSX.Element {
           cards={tavernCardsQuery.data || []}
           activeId={activeTavernCardId}
           onSelect={(id) => {
-            if (id !== activeTavernCardId && !guardCardDirty()) return;
+            if (id === activeTavernCardId) return;
+            if (!guardCardDirty()) return;
             setCardEditorDirty(false);
             setActiveTavernCardId(id);
           }}

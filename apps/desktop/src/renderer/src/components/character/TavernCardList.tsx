@@ -54,7 +54,8 @@ export function TavernCardList({
       name: "新角色卡",
       persona: "",
       providerId: provider.id,
-      model: provider.defaultModel || "default",
+      // May be empty — the editor's required-model gate forces a real value before save.
+      model: provider.defaultModel,
       syncMode: "detached",
     });
   };

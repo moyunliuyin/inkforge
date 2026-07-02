@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ProviderRecord, SyncMode, TavernCardRecord } from "@inkforge/shared";
 import { providerApi, tavernCardApi } from "../../lib/api";
@@ -37,12 +37,40 @@ function formFromCard(card: TavernCardRecord): CardForm {
   };
 }
 
+/** Mirror of what save/server normalization produces — trim-insignificant edits don't count as dirty. */
+function comparableForm(form: CardForm): CardForm {
+  return {
+    ...form,
+    name: form.name.trim(),
+    model: form.model.trim(),
+    firstMes: form.firstMes.trim(),
+    scenario: form.scenario.trim(),
+    mesExample: form.mesExample.trim(),
+    maxTokens: form.maxTokens.trim(),
+  };
+}
+
 export function TavernCardDetail({ card, onClose, onDirtyChange }: TavernCardDetailProps): JSX.Element {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<CardForm>(() => formFromCard(card));
 
+  const dirty = useMemo(
+    () => JSON.stringify(comparableForm(form)) !== JSON.stringify(comparableForm(formFromCard(card))),
+    [form, card],
+  );
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  const cardIdRef = useRef(card.id);
+
+  // Reset the form on card switch, always. On a mere updatedAt bump (save
+  // refetch / external sync) keep in-flight edits: resetting would clobber
+  // keystrokes typed while the save was in flight.
   useEffect(() => {
-    setForm(formFromCard(card));
+    const switched = cardIdRef.current !== card.id;
+    cardIdRef.current = card.id;
+    if (switched || !dirtyRef.current) {
+      setForm(formFromCard(card));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card.id, card.updatedAt]);
 
@@ -51,10 +79,6 @@ export function TavernCardDetail({ card, onClose, onDirtyChange }: TavernCardDet
     queryFn: () => providerApi.list(),
   });
 
-  const dirty = useMemo(
-    () => JSON.stringify(form) !== JSON.stringify(formFromCard(card)),
-    [form, card],
-  );
   useEffect(() => {
     onDirtyChange(dirty);
   }, [dirty, onDirtyChange]);

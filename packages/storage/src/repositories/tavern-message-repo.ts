@@ -85,7 +85,7 @@ export function listTavernMessages(
   }
   const sql = `SELECT * FROM tavern_messages
                WHERE ${clauses.join(" AND ")}
-               ORDER BY created_at ${order === "desc" ? "DESC" : "ASC"}
+               ORDER BY created_at ${order === "desc" ? "DESC, rowid DESC" : "ASC, rowid ASC"}
                LIMIT ?`;
   const rows = db.prepare(sql).all(...params, limit) as TavernMessageRow[];
   return rows.map(rowToRecord);
