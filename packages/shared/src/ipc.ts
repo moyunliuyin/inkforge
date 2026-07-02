@@ -797,6 +797,9 @@ export interface SkillDoneEvent {
 export interface TavernCardCreateInput {
   name: string;
   persona: string;
+  firstMes?: string;
+  scenario?: string;
+  mesExample?: string;
   avatarPath?: string | null;
   providerId: string;
   model: string;
@@ -810,6 +813,9 @@ export interface TavernCardUpdateInput {
   id: string;
   name?: string;
   persona?: string;
+  firstMes?: string;
+  scenario?: string;
+  mesExample?: string;
   avatarPath?: string | null;
   providerId?: string;
   model?: string;

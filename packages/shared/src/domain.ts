@@ -291,6 +291,12 @@ export interface TavernCardRecord {
   id: string;
   name: string;
   persona: string;
+  /** Opening greeting posted as the card's first message when a session starts. */
+  firstMes: string;
+  /** Scene setup injected into the system prompt. */
+  scenario: string;
+  /** Example dialogue injected as tone/pacing reference. */
+  mesExample: string;
   avatarPath: string | null;
   providerId: string;
   model: string;

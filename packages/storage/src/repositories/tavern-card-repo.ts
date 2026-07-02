@@ -5,6 +5,9 @@ type TavernCardRow = {
   id: string;
   name: string;
   persona: string;
+  first_mes: string;
+  scenario: string;
+  mes_example: string;
   avatar_path: string | null;
   provider_id: string;
   model: string;
@@ -27,11 +30,18 @@ function normalizeMaxTokens(value: number | null | undefined): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+function normalizeCardText(value: string | null | undefined): string {
+  return (value ?? "").trim();
+}
+
 function rowToRecord(row: TavernCardRow): TavernCardRecord {
   return {
     id: row.id,
     name: row.name,
     persona: row.persona,
+    firstMes: row.first_mes,
+    scenario: row.scenario,
+    mesExample: row.mes_example,
     avatarPath: row.avatar_path,
     providerId: row.provider_id,
     model: row.model,
@@ -48,6 +58,9 @@ export interface CreateTavernCardRow {
   id: string;
   name: string;
   persona: string;
+  firstMes?: string;
+  scenario?: string;
+  mesExample?: string;
   avatarPath?: string | null;
   providerId: string;
   model: string;
@@ -63,6 +76,9 @@ export function insertTavernCard(db: DB, input: CreateTavernCardRow): TavernCard
     id: input.id,
     name: input.name,
     persona: input.persona,
+    first_mes: normalizeCardText(input.firstMes),
+    scenario: normalizeCardText(input.scenario),
+    mes_example: normalizeCardText(input.mesExample),
     avatar_path: input.avatarPath ?? null,
     provider_id: input.providerId,
     model: input.model,
@@ -75,10 +91,10 @@ export function insertTavernCard(db: DB, input: CreateTavernCardRow): TavernCard
   };
   db.prepare(
     `INSERT INTO tavern_cards
-       (id, name, persona, avatar_path, provider_id, model, temperature, max_tokens,
-        linked_novel_character_id, sync_mode, created_at, updated_at)
-     VALUES (@id, @name, @persona, @avatar_path, @provider_id, @model, @temperature, @max_tokens,
-             @linked_novel_character_id, @sync_mode, @created_at, @updated_at)`,
+       (id, name, persona, first_mes, scenario, mes_example, avatar_path, provider_id, model,
+        temperature, max_tokens, linked_novel_character_id, sync_mode, created_at, updated_at)
+     VALUES (@id, @name, @persona, @first_mes, @scenario, @mes_example, @avatar_path, @provider_id, @model,
+             @temperature, @max_tokens, @linked_novel_character_id, @sync_mode, @created_at, @updated_at)`,
   ).run(row);
   return rowToRecord(row);
 }
@@ -87,6 +103,9 @@ export interface UpdateTavernCardRow {
   id: string;
   name?: string;
   persona?: string;
+  firstMes?: string;
+  scenario?: string;
+  mesExample?: string;
   avatarPath?: string | null;
   providerId?: string;
   model?: string;
@@ -105,6 +124,10 @@ export function updateTavernCard(db: DB, input: UpdateTavernCardRow): TavernCard
     ...existing,
     name: input.name ?? existing.name,
     persona: input.persona ?? existing.persona,
+    first_mes: input.firstMes === undefined ? existing.first_mes : normalizeCardText(input.firstMes),
+    scenario: input.scenario === undefined ? existing.scenario : normalizeCardText(input.scenario),
+    mes_example:
+      input.mesExample === undefined ? existing.mes_example : normalizeCardText(input.mesExample),
     avatar_path: input.avatarPath === undefined ? existing.avatar_path : input.avatarPath,
     provider_id: input.providerId ?? existing.provider_id,
     model: input.model ?? existing.model,
@@ -119,7 +142,8 @@ export function updateTavernCard(db: DB, input: UpdateTavernCardRow): TavernCard
   };
   db.prepare(
     `UPDATE tavern_cards SET
-       name = @name, persona = @persona, avatar_path = @avatar_path,
+       name = @name, persona = @persona, first_mes = @first_mes, scenario = @scenario,
+       mes_example = @mes_example, avatar_path = @avatar_path,
        provider_id = @provider_id, model = @model, temperature = @temperature,
        max_tokens = @max_tokens,
        linked_novel_character_id = @linked_novel_character_id,

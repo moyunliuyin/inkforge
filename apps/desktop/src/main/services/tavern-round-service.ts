@@ -4,6 +4,7 @@ import {
   ContextBuilder,
   BudgetTracker,
   RoundOrchestrator,
+  buildOpeningSeedMessages,
   type LLMMessage,
   type OrchestratorStreamChunk,
   type OrchestratorStreamInput,
@@ -106,6 +107,29 @@ export async function startTavernRound(
   const mode = input.mode ?? session.mode;
   const lastK = input.lastK ?? session.lastK;
   const autoRounds = mode === "auto" ? Math.max(1, input.autoRounds ?? 1) : 1;
+
+  // First advance on an empty transcript: post each participant's opening
+  // greeting as a persisted character message before any LLM turn runs.
+  const openingSeeds = buildOpeningSeedMessages({
+    participants,
+    history: listTavernMessages(ctx.db, { sessionId: session.id, order: "asc" }) as TavernMessageRecord[],
+  });
+  if (openingSeeds.length > 0) {
+    ctx.db.transaction(() => {
+      for (const seed of openingSeeds) {
+        insertTavernMessage(ctx.db, {
+          id: randomUUID(),
+          sessionId: session.id,
+          characterId: seed.characterId,
+          role: "character",
+          content: seed.content,
+          tokensIn: 0,
+          tokensOut: 0,
+          createdAt: seed.createdAt,
+        });
+      }
+    })();
+  }
 
   const roundId = randomUUID();
   const builder = new ContextBuilder();

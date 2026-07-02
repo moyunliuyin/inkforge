@@ -53,6 +53,11 @@ function speakerLabel(
   return "未知角色";
 }
 
+/** Replace the {{char}} macro with the card's name. {{user}} is deferred to user-persona work. */
+export function renderCardText(text: string, charName: string): string {
+  return text.replaceAll("{{char}}", charName);
+}
+
 export class ContextBuilder {
   build(input: BuildContextInput): BuiltContext {
     const {
@@ -69,7 +74,18 @@ export class ContextBuilder {
     const personaLines: string[] = [];
     personaLines.push(`你扮演的角色：${speakerCard.name}`);
     if (speakerCard.persona && speakerCard.persona.trim().length > 0) {
-      personaLines.push(`角色设定：${speakerCard.persona.trim()}`);
+      personaLines.push(`角色设定：${renderCardText(speakerCard.persona.trim(), speakerCard.name)}`);
+    }
+    if (speakerCard.scenario && speakerCard.scenario.trim().length > 0) {
+      personaLines.push(`场景设定：${renderCardText(speakerCard.scenario.trim(), speakerCard.name)}`);
+    }
+    if (speakerCard.mesExample && speakerCard.mesExample.trim().length > 0) {
+      personaLines.push(
+        `示例对白（仅作为语气、关系和节奏的参考，不要复述示例原句）：\n${renderCardText(
+          speakerCard.mesExample.trim(),
+          speakerCard.name,
+        )}`,
+      );
     }
     personaLines.push(`会话议题：${topic}`);
     personaLines.push(

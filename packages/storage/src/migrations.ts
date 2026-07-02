@@ -856,6 +856,32 @@ const migrations: Migration[] = [
       }
     },
   },
+  {
+    // ===================================================================
+    // v22 · Tavern card depth (SillyTavern-style)
+    //
+    // first_mes: opening greeting seeded as the card's first message;
+    // scenario / mes_example: injected into the speaker system prompt.
+    // Empty-string defaults keep existing cards byte-compatible.
+    // ===================================================================
+    version: 22,
+    name: "tavern_card_depth_fields",
+    up: (db) => {
+      const cols = db
+        .prepare(`PRAGMA table_info(tavern_cards)`)
+        .all()
+        .map((row) => (row as { name: string }).name);
+      if (!cols.includes("first_mes")) {
+        db.exec(`ALTER TABLE tavern_cards ADD COLUMN first_mes TEXT NOT NULL DEFAULT ''`);
+      }
+      if (!cols.includes("scenario")) {
+        db.exec(`ALTER TABLE tavern_cards ADD COLUMN scenario TEXT NOT NULL DEFAULT ''`);
+      }
+      if (!cols.includes("mes_example")) {
+        db.exec(`ALTER TABLE tavern_cards ADD COLUMN mes_example TEXT NOT NULL DEFAULT ''`);
+      }
+    },
+  },
 ];
 
 export function runMigrations(db: DB): number {

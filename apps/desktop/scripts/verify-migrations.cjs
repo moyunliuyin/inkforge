@@ -103,7 +103,7 @@ const EXPECTED_INDEXES = [
   "idx_world_rel_dst",
 ];
 
-const EXPECTED_MAX_VERSION = 19;
+const EXPECTED_MAX_VERSION = 22;
 const EXPECTED_VERSIONS = Array.from(
   { length: EXPECTED_MAX_VERSION },
   (_, i) => i + 1,
@@ -168,6 +168,19 @@ function main() {
       fail(`schema_migrations missing versions: ${mismatched.join(", ")}`);
     } else {
       ok(`schema_migrations rows = ${appliedVersions.join(",")}`);
+    }
+
+    // v21/v22 · tavern_cards column upgrades
+    const cardCols = db
+      .prepare(`PRAGMA table_info(tavern_cards)`)
+      .all()
+      .map((r) => r.name);
+    const expectedCardCols = ["max_tokens", "first_mes", "scenario", "mes_example"];
+    const missingCardCols = expectedCardCols.filter((c) => !cardCols.includes(c));
+    if (missingCardCols.length > 0) {
+      fail(`tavern_cards missing columns: ${missingCardCols.join(", ")}`);
+    } else {
+      ok("tavern_cards has v21/v22 columns (max_tokens, first_mes, scenario, mes_example)");
     }
   } finally {
     try {

@@ -10,6 +10,7 @@ const {
   BudgetTracker,
   ContextBuilder,
   RoundOrchestrator,
+  buildOpeningSeedMessages,
   estimateTokensFromText,
 } = require("@inkforge/tavern-engine");
 
@@ -65,10 +66,14 @@ function testContextBuilder() {
     id: "card-a",
     name: "林晚",
     persona: "温和内敛，剑法精湛",
+    firstMes: "",
+    scenario: "{{char}}与陆九在暴雨夜的酒馆对峙",
+    mesExample: "{{char}}：例句台词",
     avatarPath: null,
     providerId: "p1",
     model: "m1",
     temperature: 0.8,
+    maxTokens: null,
     linkedNovelCharacterId: null,
     syncMode: "two-way",
     createdAt: "",
@@ -144,6 +149,24 @@ function testContextBuilder() {
   );
   assert(!!directorInjected, "director 模式将 directorMessage 注入末尾 user 段");
 
+  assert(
+    built.systemPrompt.includes("场景设定：林晚与陆九在暴雨夜的酒馆对峙"),
+    "scenario 注入且 {{char}} 已替换",
+  );
+  assert(
+    built.systemPrompt.includes("示例对白") && built.systemPrompt.includes("林晚：例句台词"),
+    "mesExample 注入且 {{char}} 已替换",
+  );
+  const pPersona = built.systemPrompt.indexOf("角色设定");
+  const pScenario = built.systemPrompt.indexOf("场景设定");
+  const pExample = built.systemPrompt.indexOf("示例对白");
+  const pTopic = built.systemPrompt.indexOf("会话议题");
+  assert(
+    pPersona !== -1 && pPersona < pScenario && pScenario < pExample && pExample < pTopic,
+    "system prompt 顺序：persona < scenario < mesExample < topic",
+  );
+  assert(!built.systemPrompt.includes("{{char}}"), "system prompt 无 {{char}} 残留");
+
   const autoDirector = builder.build({
     speakerCard: speaker,
     allCards: [speaker, other],
@@ -192,6 +215,9 @@ function makeCard(id, name) {
     id,
     name,
     persona: "",
+    firstMes: "",
+    scenario: "",
+    mesExample: "",
     avatarPath: null,
     providerId: "p",
     model: "m",
@@ -202,6 +228,57 @@ function makeCard(id, name) {
     createdAt: "",
     updatedAt: "",
   };
+}
+
+function testOpeningSeeder() {
+  const a = { ...makeCard("a", "甲"), firstMes: "大家好，我是{{char}}。" };
+  const b = { ...makeCard("b", "乙"), firstMes: "   " };
+  const c = makeCard("c", "丙");
+  const d = { ...makeCard("d", "丁"), firstMes: "开场" };
+
+  const seeds = buildOpeningSeedMessages({
+    participants: [a, b, c, d],
+    history: [],
+    baseTimeMs: 1000,
+  });
+  assert(seeds.length === 2, `空对话时仅非空 firstMes 卡产生 seed（实际 ${seeds.length}）`);
+  assert(
+    seeds[0].characterId === "a" && seeds[0].content === "大家好，我是甲。",
+    "seed 内容完成 {{char}} 替换",
+  );
+  assert(seeds[0].createdAt < seeds[1].createdAt, "seed createdAt 按参与者顺序递增");
+
+  const nonEmpty = buildOpeningSeedMessages({
+    participants: [a],
+    history: [
+      {
+        id: "m1",
+        sessionId: "s",
+        characterId: "a",
+        role: "character",
+        content: "已有发言",
+        tokensIn: 0,
+        tokensOut: 0,
+        createdAt: "2026-01-01T00:00:00Z",
+      },
+    ],
+  });
+  assert(nonEmpty.length === 0, "对话非空时不再 seed");
+
+  const asHistory = seeds.map((s, i) => ({
+    id: `h${i}`,
+    sessionId: "s",
+    characterId: s.characterId,
+    role: "character",
+    content: s.content,
+    tokensIn: 0,
+    tokensOut: 0,
+    createdAt: s.createdAt,
+  }));
+  assert(
+    buildOpeningSeedMessages({ participants: [a, d], history: asHistory }).length === 0,
+    "seed 落库后再次调用不重复（幂等）",
+  );
 }
 
 async function testRoundOrchestrator() {
@@ -397,6 +474,8 @@ async function main() {
   testBudget();
   console.log("\n[verify-engine] ContextBuilder build");
   testContextBuilder();
+  console.log("\n[verify-engine] OpeningSeeder");
+  testOpeningSeeder();
   console.log("\n[verify-engine] RoundOrchestrator run (auto + compaction DI)");
   await testRoundOrchestrator();
   console.log("\n[verify-engine] RoundOrchestrator stream watchdog");

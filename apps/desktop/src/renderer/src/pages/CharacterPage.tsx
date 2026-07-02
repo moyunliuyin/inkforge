@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAppStore } from "../stores/app-store";
 import { novelCharacterApi, tavernCardApi } from "../lib/api";
 import { NovelCharacterList } from "../components/character/NovelCharacterList";
 import { NovelCharacterDetail } from "../components/character/NovelCharacterDetail";
 import { TavernCardList } from "../components/character/TavernCardList";
+import { TavernCardDetail } from "../components/character/TavernCardDetail";
 import { SyncDiffDialog } from "../components/character/SyncDiffDialog";
 
 export function CharacterPage(): JSX.Element {
@@ -14,6 +16,7 @@ export function CharacterPage(): JSX.Element {
   const setActiveTavernCardId = useAppStore((s) => s.setActiveTavernCardId);
   const syncDiffData = useAppStore((s) => s.syncDiffData);
   const setSyncDiffData = useAppStore((s) => s.setSyncDiffData);
+  const [cardEditorDirty, setCardEditorDirty] = useState(false);
 
   const novelCharsQuery = useQuery({
     queryKey: ["novelCharacters", currentProjectId],
@@ -38,40 +41,65 @@ export function CharacterPage(): JSX.Element {
   }
 
   const activeChar = (novelCharsQuery.data || []).find(c => c.id === activeNovelCharacterId);
+  const activeTavernCard = (tavernCardsQuery.data || []).find(c => c.id === activeTavernCardId);
+
+  const guardCardDirty = (): boolean => {
+    if (!cardEditorDirty) return true;
+    return window.confirm("酒馆卡有未保存的修改，切换将丢失。继续？");
+  };
 
   return (
     <div className="flex h-full w-full bg-ink-900 overflow-hidden">
       {/* Left Column: Novel Character List */}
       <aside className="w-[300px] shrink-0 border-r border-ink-700">
-        <NovelCharacterList 
+        <NovelCharacterList
           projectId={currentProjectId}
           characters={novelCharsQuery.data || []}
           activeId={activeNovelCharacterId}
-          onSelect={setActiveNovelCharacterId}
+          onSelect={(id) => {
+            if (!guardCardDirty()) return;
+            setCardEditorDirty(false);
+            setActiveTavernCardId(null);
+            setActiveNovelCharacterId(id);
+          }}
         />
       </aside>
 
-      {/* Center Column: Detail Editor */}
+      {/* Center Column: Detail Editor (tavern card takes priority when selected) */}
       <main className="flex-1 min-w-0 flex flex-col">
-        {activeChar ? (
-          <NovelCharacterDetail 
+        {activeTavernCard ? (
+          <TavernCardDetail
+            card={activeTavernCard}
+            onClose={() => {
+              if (!guardCardDirty()) return;
+              setCardEditorDirty(false);
+              setActiveTavernCardId(null);
+            }}
+            onDirtyChange={setCardEditorDirty}
+          />
+        ) : activeChar ? (
+          <NovelCharacterDetail
             novelCharacter={activeChar}
             tavernCards={tavernCardsQuery.data || []}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center text-ink-500 text-sm italic">
-            请从左侧选择一个角色开始编辑
+            请从左侧选择一个角色，或从右侧选择一张酒馆卡开始编辑
           </div>
         )}
       </main>
 
       {/* Right Column: Tavern Card List */}
       <aside className="w-[320px] shrink-0">
-        <TavernCardList 
+        <TavernCardList
           projectId={currentProjectId}
           cards={tavernCardsQuery.data || []}
           activeId={activeTavernCardId}
-          onSelect={setActiveTavernCardId}
+          onSelect={(id) => {
+            if (id !== activeTavernCardId && !guardCardDirty()) return;
+            setCardEditorDirty(false);
+            setActiveTavernCardId(id);
+          }}
           novelCharacters={novelCharsQuery.data || []}
         />
       </aside>

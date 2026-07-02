@@ -95,6 +95,8 @@ export function DirectorPanel({ session, cards }: DirectorPanelProps): JSX.Eleme
       }),
     onSuccess: (res) => {
       setDirectorMessage("");
+      // Surface opening-greeting seeds (posted server-side before the LLM turns).
+      queryClient.invalidateQueries({ queryKey: ["tavernMessages", session.id] });
       // A very fast / failed round may have already emitted its round-done before
       // this callback ran — don't strand the UI in "running".
       if (settledRoundsRef.current.has(res.roundId)) {
